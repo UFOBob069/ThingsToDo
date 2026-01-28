@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    { "source": "/api/activities/:id", "destination": "/api/activities/[id]" },
+    { "source": "/api/activities", "destination": "/api/activities/index" },
+    { "source": "/api/cities", "destination": "/api/cities" },
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
+  ]
+}

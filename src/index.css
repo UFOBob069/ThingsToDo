@@ -1,0 +1,81 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+
+  body {
+    @apply bg-gray-50 text-gray-900 antialiased;
+    overflow-x: hidden;
+    overscroll-behavior: none;
+  }
+
+  * {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  input, textarea {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+}
+
+@layer components {
+  .card-shadow {
+    box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.3),
+                0 4px 16px -4px rgba(0, 0, 0, 0.15);
+  }
+
+  .safe-area-inset-top {
+    padding-top: env(safe-area-inset-top);
+  }
+
+  .safe-area-inset-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .btn-primary {
+    @apply bg-primary-500 text-white font-semibold py-3 px-6 rounded-full
+           active:bg-primary-600 transition-colors duration-150
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-secondary {
+    @apply bg-white text-gray-700 font-semibold py-3 px-6 rounded-full
+           border border-gray-200 active:bg-gray-100 transition-colors duration-150;
+  }
+
+  .btn-icon {
+    @apply w-14 h-14 rounded-full flex items-center justify-center
+           transition-transform duration-150 active:scale-95;
+  }
+
+  .swipe-indicator {
+    @apply absolute top-1/2 -translate-y-1/2 px-8 py-4 rounded-xl
+           font-bold text-2xl uppercase tracking-wide border-4
+           transform rotate-[-20deg] opacity-0 transition-opacity;
+  }
+}
+
+@layer utilities {
+  .touch-pan-y {
+    touch-action: pan-y;
+  }
+
+  .touch-none {
+    touch-action: none;
+  }
+
+  .will-change-transform {
+    will-change: transform;
+  }
+
+  .backface-hidden {
+    backface-visibility: hidden;
+  }
+}

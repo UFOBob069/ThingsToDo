@@ -23,6 +23,21 @@ const AMADEUS_BASE_URL = 'https://test.api.amadeus.com'
 let accessToken: string | null = null
 let tokenExpiry: number = 0
 
+// Strip HTML tags from text
+function stripHtml(html: string | undefined): string {
+  if (!html) return ''
+  return html
+    .replace(/<[^>]*>/g, '') // Remove HTML tags
+    .replace(/&nbsp;/g, ' ') // Replace &nbsp; with space
+    .replace(/&amp;/g, '&')  // Replace &amp; with &
+    .replace(/&lt;/g, '<')   // Replace &lt; with <
+    .replace(/&gt;/g, '>')   // Replace &gt; with >
+    .replace(/&quot;/g, '"') // Replace &quot; with "
+    .replace(/&#39;/g, "'")  // Replace &#39; with '
+    .replace(/\s+/g, ' ')    // Normalize whitespace
+    .trim()
+}
+
 async function getAmadeusToken(): Promise<string> {
   if (accessToken && Date.now() < tokenExpiry) {
     return accessToken
@@ -61,11 +76,15 @@ function transformActivity(activity: any, city: string): ActivityCard {
     priceText = `${currency === 'USD' ? '$' : currency + ' '}${amount.toFixed(0)}`
   }
 
+  // Strip HTML from descriptions
+  const rawShortDesc = activity.shortDescription || activity.description?.substring(0, 150) || ''
+  const rawFullDesc = activity.description || ''
+
   return {
     id: activity.id,
-    name: activity.name,
-    shortDescription: activity.shortDescription || activity.description?.substring(0, 150) || '',
-    fullDescription: activity.description,
+    name: stripHtml(activity.name),
+    shortDescription: stripHtml(rawShortDesc),
+    fullDescription: stripHtml(rawFullDesc),
     heroImageUrl: activity.pictures?.[0] || 'https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=800&q=80',
     city,
     latitude: parseFloat(activity.geoCode?.latitude || 0),

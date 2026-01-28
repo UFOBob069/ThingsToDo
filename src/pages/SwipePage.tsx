@@ -122,7 +122,7 @@ function SwipePage({ city, onChangeCity }: SwipePageProps) {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-100">
+    <div className="h-[100dvh] flex flex-col bg-gray-100">
       <Header
         city={city}
         savedCount={savedCount}
@@ -130,11 +130,11 @@ function SwipePage({ city, onChangeCity }: SwipePageProps) {
         onViewSaved={() => navigate('/saved')}
       />
 
-      <main className="flex-1 relative overflow-hidden">
-        <div className="absolute inset-0 flex items-center justify-center px-4 py-6">
-          <div className="relative w-full max-w-md h-full max-h-[600px]">
+      <main className="flex-1 relative overflow-hidden min-h-0">
+        <div className="absolute inset-0 flex items-center justify-center p-3">
+          <div className="relative w-full max-w-md h-full">
             {nextActivity && (
-              <div className="absolute inset-0 transform scale-95 opacity-70">
+              <div className="absolute inset-0 transform scale-[0.97] opacity-70">
                 <SwipeCard
                   activity={nextActivity}
                   isBackground
@@ -153,41 +153,41 @@ function SwipePage({ city, onChangeCity }: SwipePageProps) {
         </div>
       </main>
 
-      <footer className="bg-white border-t border-gray-200 safe-area-inset-bottom">
-        <div className="flex justify-center items-center gap-6 py-4 px-6">
+      <footer className="flex-shrink-0 bg-white border-t border-gray-200 safe-area-inset-bottom">
+        <div className="flex justify-center items-center gap-5 py-3 px-4">
           <button
             onClick={handleSwipeLeft}
-            className="btn-icon bg-white border-2 border-red-200 text-red-500 shadow-md hover:bg-red-50"
+            className="btn-icon bg-white border-2 border-red-200 text-red-500 shadow-md hover:bg-red-50 active:scale-95"
             aria-label="Dismiss"
           >
-            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
 
           <button
             onClick={() => handleViewDetails(currentActivity)}
-            className="btn-icon bg-white border-2 border-blue-200 text-blue-500 shadow-md hover:bg-blue-50"
+            className="btn-icon bg-white border-2 border-blue-200 text-blue-500 shadow-md hover:bg-blue-50 active:scale-95 w-12 h-12"
             aria-label="View details"
           >
-            <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           </button>
 
           <button
             onClick={handleSwipeRight}
-            className="btn-icon bg-white border-2 border-green-200 text-green-500 shadow-md hover:bg-green-50"
+            className="btn-icon bg-white border-2 border-green-200 text-green-500 shadow-md hover:bg-green-50 active:scale-95"
             aria-label="Save"
           >
-            <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24">
+            <svg className="w-7 h-7" fill="currentColor" viewBox="0 0 24 24">
               <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
             </svg>
           </button>
         </div>
 
-        <div className="text-center pb-4 text-sm text-gray-500">
-          {currentIndex + 1} of {activities.length}
+        <div className="text-center pb-2 text-xs text-gray-400">
+          {currentIndex + 1} / {activities.length}
         </div>
       </footer>
 

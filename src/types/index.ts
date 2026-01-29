@@ -30,6 +30,12 @@ export interface SavedActivity extends ActivityCard {
   savedAt: number
 }
 
+export interface SwipeHistoryItem {
+  activity: ActivityCard
+  direction: 'left' | 'right'
+  swipedAt: number
+}
+
 export interface ApiResponse<T> {
   success: boolean
   data?: T

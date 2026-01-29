@@ -6,11 +6,28 @@ import AuthModal from './AuthModal'
 interface HeaderProps {
   city: City
   savedCount: number
+  historyCount?: number
   onChangeCity: () => void
   onViewSaved: () => void
+  onViewHistory?: () => void
+  showSearch?: boolean
+  onToggleSearch?: () => void
+  searchQuery?: string
+  onSearchChange?: (query: string) => void
 }
 
-function Header({ city, savedCount, onChangeCity, onViewSaved }: HeaderProps) {
+function Header({
+  city,
+  savedCount,
+  historyCount = 0,
+  onChangeCity,
+  onViewSaved,
+  onViewHistory,
+  showSearch = false,
+  onToggleSearch,
+  searchQuery = '',
+  onSearchChange,
+}: HeaderProps) {
   const { user, logout } = useAuth()
   const [showAuthModal, setShowAuthModal] = useState(false)
   const [showUserMenu, setShowUserMenu] = useState(false)
@@ -41,6 +58,38 @@ function Header({ city, savedCount, onChangeCity, onViewSaved }: HeaderProps) {
           <h1 className="text-lg font-bold text-primary-500">DoStuff</h1>
 
           <div className="flex items-center gap-2">
+            {/* Search toggle button */}
+            {onToggleSearch && (
+              <button
+                onClick={onToggleSearch}
+                className={`p-1 transition-colors ${showSearch ? 'text-primary-500' : 'text-gray-700 hover:text-gray-900'}`}
+                aria-label="Search activities"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </button>
+            )}
+
+            {/* History button */}
+            {onViewHistory && (
+              <button
+                onClick={onViewHistory}
+                className="relative flex items-center gap-1 text-gray-700 hover:text-gray-900 transition-colors p-1"
+                aria-label="View swipe history"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                {historyCount > 0 && (
+                  <span className="absolute -top-1 -right-1 w-5 h-5 bg-gray-500 text-white text-xs font-bold rounded-full flex items-center justify-center">
+                    {historyCount > 99 ? '99+' : historyCount}
+                  </span>
+                )}
+              </button>
+            )}
+
+            {/* Saved button */}
             <button
               onClick={onViewSaved}
               className="relative flex items-center gap-1 text-gray-700 hover:text-gray-900 transition-colors p-1"
@@ -103,6 +152,42 @@ function Header({ city, savedCount, onChangeCity, onViewSaved }: HeaderProps) {
             )}
           </div>
         </div>
+
+        {/* Search Bar */}
+        {showSearch && onSearchChange && (
+          <div className="px-4 pb-3 border-t border-gray-100">
+            <div className="relative mt-3">
+              <svg
+                className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              <input
+                type="text"
+                placeholder="Search by name, cruise, tour, food..."
+                value={searchQuery}
+                onChange={(e) => onSearchChange(e.target.value)}
+                className="w-full pl-10 pr-10 py-2 bg-gray-100 border border-transparent rounded-xl
+                           focus:bg-white focus:border-primary-300 focus:ring-2 focus:ring-primary-100
+                           transition-all text-sm"
+                autoFocus
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => onSearchChange('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
+            </div>
+          </div>
+        )}
       </header>
 
       <AuthModal

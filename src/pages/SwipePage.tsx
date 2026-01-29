@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { City, ActivityCard } from '../types'
 import { searchActivities } from '../utils/api'
 import { useSavedActivities } from '../hooks/useSavedActivities'
+import { useSwipeHistory } from '../hooks/useSwipeHistory'
 import SwipeCard from '../components/SwipeCard'
 import ActivityDetailsModal from '../components/ActivityDetailsModal'
 import Header from '../components/Header'
@@ -21,7 +22,10 @@ function SwipePage({ city, onChangeCity }: SwipePageProps) {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedActivity, setSelectedActivity] = useState<ActivityCard | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [showSearch, setShowSearch] = useState(false)
   const { saveActivity, count: savedCount } = useSavedActivities()
+  const { addToHistory, count: historyCount } = useSwipeHistory()
 
   const loadActivities = useCallback(async () => {
     setIsLoading(true)
@@ -43,17 +47,33 @@ function SwipePage({ city, onChangeCity }: SwipePageProps) {
     loadActivities()
   }, [loadActivities])
 
-  const handleSwipeLeft = useCallback(() => {
-    setCurrentIndex(prev => prev + 1)
-  }, [])
+  // Filter activities based on search query
+  const filteredActivities = useMemo(() => {
+    if (!searchQuery.trim()) return activities
+    const query = searchQuery.toLowerCase()
+    return activities.filter(activity =>
+      activity.name.toLowerCase().includes(query) ||
+      activity.shortDescription.toLowerCase().includes(query) ||
+      (activity.fullDescription?.toLowerCase().includes(query) ?? false)
+    )
+  }, [activities, searchQuery])
 
-  const handleSwipeRight = useCallback(() => {
-    const currentActivity = activities[currentIndex]
-    if (currentActivity) {
-      saveActivity(currentActivity)
+  const handleSwipeLeft = useCallback(() => {
+    const activity = filteredActivities[currentIndex]
+    if (activity) {
+      addToHistory(activity, 'left')
     }
     setCurrentIndex(prev => prev + 1)
-  }, [activities, currentIndex, saveActivity])
+  }, [filteredActivities, currentIndex, addToHistory])
+
+  const handleSwipeRight = useCallback(() => {
+    const currentActivity = filteredActivities[currentIndex]
+    if (currentActivity) {
+      saveActivity(currentActivity)
+      addToHistory(currentActivity, 'right')
+    }
+    setCurrentIndex(prev => prev + 1)
+  }, [filteredActivities, currentIndex, saveActivity, addToHistory])
 
   const handleViewDetails = useCallback((activity: ActivityCard) => {
     setSelectedActivity(activity)
@@ -63,9 +83,14 @@ function SwipePage({ city, onChangeCity }: SwipePageProps) {
     setSelectedActivity(null)
   }, [])
 
-  const currentActivity = activities[currentIndex]
-  const nextActivity = activities[currentIndex + 1]
-  const hasMoreCards = currentIndex < activities.length
+  const currentActivity = filteredActivities[currentIndex]
+  const nextActivity = filteredActivities[currentIndex + 1]
+  const hasMoreCards = currentIndex < filteredActivities.length
+
+  // Reset index when search changes
+  useEffect(() => {
+    setCurrentIndex(0)
+  }, [searchQuery])
 
   if (isLoading) {
     return (
@@ -73,8 +98,10 @@ function SwipePage({ city, onChangeCity }: SwipePageProps) {
         <Header
           city={city}
           savedCount={savedCount}
+          historyCount={historyCount}
           onChangeCity={onChangeCity}
           onViewSaved={() => navigate('/saved')}
+          onViewHistory={() => navigate('/history')}
         />
         <LoadingState message={`Finding things to do in ${city.name}...`} />
       </div>
@@ -87,8 +114,10 @@ function SwipePage({ city, onChangeCity }: SwipePageProps) {
         <Header
           city={city}
           savedCount={savedCount}
+          historyCount={historyCount}
           onChangeCity={onChangeCity}
           onViewSaved={() => navigate('/saved')}
+          onViewHistory={() => navigate('/history')}
         />
         <EmptyState
           title="Oops!"
@@ -106,16 +135,22 @@ function SwipePage({ city, onChangeCity }: SwipePageProps) {
         <Header
           city={city}
           savedCount={savedCount}
+          historyCount={historyCount}
           onChangeCity={onChangeCity}
           onViewSaved={() => navigate('/saved')}
+          onViewHistory={() => navigate('/history')}
         />
         <EmptyState
-          title="That's all!"
-          message={`You've seen all ${activities.length} activities in ${city.name}`}
-          actionLabel={savedCount > 0 ? 'View Saved' : 'Try Another City'}
-          onAction={savedCount > 0 ? () => navigate('/saved') : onChangeCity}
-          secondaryLabel={savedCount > 0 ? 'Change City' : undefined}
-          onSecondaryAction={savedCount > 0 ? onChangeCity : undefined}
+          title={searchQuery ? "No matches!" : "That's all!"}
+          message={
+            searchQuery
+              ? `No activities match "${searchQuery}" in ${city.name}`
+              : `You've seen all ${filteredActivities.length} activities in ${city.name}`
+          }
+          actionLabel={searchQuery ? 'Clear Search' : (savedCount > 0 ? 'View Saved' : 'Try Another City')}
+          onAction={searchQuery ? () => setSearchQuery('') : (savedCount > 0 ? () => navigate('/saved') : onChangeCity)}
+          secondaryLabel={searchQuery ? undefined : (savedCount > 0 ? 'Change City' : undefined)}
+          onSecondaryAction={searchQuery ? undefined : (savedCount > 0 ? onChangeCity : undefined)}
         />
       </div>
     )
@@ -126,8 +161,14 @@ function SwipePage({ city, onChangeCity }: SwipePageProps) {
       <Header
         city={city}
         savedCount={savedCount}
+        historyCount={historyCount}
         onChangeCity={onChangeCity}
         onViewSaved={() => navigate('/saved')}
+        onViewHistory={() => navigate('/history')}
+        showSearch={showSearch}
+        onToggleSearch={() => setShowSearch(!showSearch)}
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
       />
 
       <main className="flex-1 relative overflow-hidden min-h-0">
@@ -187,7 +228,8 @@ function SwipePage({ city, onChangeCity }: SwipePageProps) {
         </div>
 
         <div className="text-center pb-2 text-xs text-gray-400">
-          {currentIndex + 1} / {activities.length}
+          {currentIndex + 1} / {filteredActivities.length}
+          {searchQuery && ` (filtered from ${activities.length})`}
         </div>
       </footer>
 

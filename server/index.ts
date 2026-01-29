@@ -13,67 +13,64 @@ const detailsCache = new NodeCache({ stdTTL: 1800 }) // 30 min
 app.use(cors())
 app.use(express.json())
 
-// Amadeus API configuration
-const AMADEUS_API_KEY = process.env.AMADEUS_API_KEY || ''
-const AMADEUS_API_SECRET = process.env.AMADEUS_API_SECRET || ''
-const AMADEUS_BASE_URL = 'https://test.api.amadeus.com'
+// Viator API configuration
+const VIATOR_API_KEY = process.env.VIATOR_API_KEY || ''
+const VIATOR_BASE_URL = 'https://api.viator.com/partner'
 
-let accessToken: string | null = null
-let tokenExpiry: number = 0
-
-async function getAmadeusToken(): Promise<string> {
-  if (accessToken && Date.now() < tokenExpiry) {
-    return accessToken
-  }
-
-  const response = await fetch(`${AMADEUS_BASE_URL}/v1/security/oauth2/token`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: new URLSearchParams({
-      grant_type: 'client_credentials',
-      client_id: AMADEUS_API_KEY,
-      client_secret: AMADEUS_API_SECRET,
-    }),
-  })
-
-  if (!response.ok) {
-    throw new Error('Failed to get Amadeus access token')
-  }
-
-  const data = await response.json()
-  accessToken = data.access_token
-  tokenExpiry = Date.now() + (data.expires_in - 60) * 1000 // Refresh 1 min early
-
-  return accessToken!
+// Strip HTML tags from text
+function stripHtml(html: string | undefined): string {
+  if (!html) return ''
+  return html
+    .replace(/<[^>]*>/g, '') // Remove HTML tags
+    .replace(/&nbsp;/g, ' ') // Replace &nbsp; with space
+    .replace(/&amp;/g, '&')  // Replace &amp; with &
+    .replace(/&lt;/g, '<')   // Replace &lt; with <
+    .replace(/&gt;/g, '>')   // Replace &gt; with >
+    .replace(/&quot;/g, '"') // Replace &quot; with "
+    .replace(/&#39;/g, "'")  // Replace &#39; with '
+    .replace(/\s+/g, ' ')    // Normalize whitespace
+    .trim()
 }
 
-// Transform Amadeus activity to our format
-function transformActivity(activity: any, city: string): ActivityCard {
-  const price = activity.price
+// Transform Viator product to our format
+function transformViatorProduct(product: any, city: string): ActivityCard {
+  // Handle pricing - Viator uses pricing.summary.fromPrice
   let priceText: string | undefined
-
-  if (price) {
-    const amount = parseFloat(price.amount)
-    const currency = price.currencyCode || 'USD'
+  if (product.pricing?.summary?.fromPrice) {
+    const amount = parseFloat(product.pricing.summary.fromPrice)
+    const currency = product.pricing?.currency || 'USD'
     priceText = `${currency === 'USD' ? '$' : currency + ' '}${amount.toFixed(0)}`
   }
 
+  // Get the best image available
+  const heroImageUrl = product.images?.[0]?.variants?.find((v: any) => v.width >= 600)?.url
+    || product.images?.[0]?.variants?.[0]?.url
+    || 'https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=800&q=80'
+
+  // Get rating from reviews
+  const rating = product.reviews?.combinedAverageRating
+    ? parseFloat(product.reviews.combinedAverageRating.toFixed(1))
+    : undefined
+
+  const reviewCount = product.reviews?.totalReviews
+
+  // Build booking URL
+  const bookingUrl = product.productUrl || `https://www.viator.com/tours/${product.productCode}`
+
   return {
-    id: activity.id,
-    name: activity.name,
-    shortDescription: activity.shortDescription || activity.description?.substring(0, 150) || '',
-    fullDescription: activity.description,
-    heroImageUrl: activity.pictures?.[0] || 'https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=800&q=80',
-    city,
-    latitude: parseFloat(activity.geoCode?.latitude || 0),
-    longitude: parseFloat(activity.geoCode?.longitude || 0),
-    rating: activity.rating ? parseFloat(activity.rating) : undefined,
-    reviewCount: activity.reviews?.totalReviews,
+    id: product.productCode,
+    name: stripHtml(product.title),
+    shortDescription: stripHtml(product.description?.substring(0, 150) || ''),
+    fullDescription: stripHtml(product.description || ''),
+    heroImageUrl,
+    city: city || product.destinations?.[0]?.name || '',
+    latitude: product.geoLocation?.latitude || 0,
+    longitude: product.geoLocation?.longitude || 0,
+    rating,
+    reviewCount,
     priceText,
-    bookingUrl: activity.bookingLink || `https://www.amadeus.com/activities/${activity.id}`,
-    source: 'amadeus',
+    bookingUrl,
+    source: 'viator',
   }
 }
 
@@ -93,30 +90,51 @@ app.get('/api/activities', async (req, res) => {
       return res.json(cached)
     }
 
-    // If no API keys, return demo data
-    if (!AMADEUS_API_KEY || !AMADEUS_API_SECRET) {
+    // If no API key, return demo data
+    if (!VIATOR_API_KEY) {
       const demoActivities = generateDemoActivities(city as string || 'Unknown City')
       searchCache.set(cacheKey, demoActivities)
       return res.json(demoActivities)
     }
 
-    const token = await getAmadeusToken()
+    // Viator uses a freetext search with location filtering
+    const searchPayload = {
+      filtering: {
+        destination: city as string || undefined,
+        lowestPrice: 0,
+        highestPrice: 500,
+      },
+      sorting: {
+        sort: 'TRAVELER_RATING',
+        order: 'DESCENDING',
+      },
+      pagination: {
+        start: 1,
+        count: 30,
+      },
+      currency: 'USD',
+    }
 
-    const response = await fetch(
-      `${AMADEUS_BASE_URL}/v1/shopping/activities?latitude=${latitude}&longitude=${longitude}&radius=20`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      }
-    )
+    const response = await fetch(`${VIATOR_BASE_URL}/products/search`, {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json;version=2.0',
+        'Content-Type': 'application/json',
+        'exp-api-key': VIATOR_API_KEY,
+        'Accept-Language': 'en-US',
+      },
+      body: JSON.stringify(searchPayload),
+    })
 
     if (!response.ok) {
-      throw new Error(`Amadeus API error: ${response.status}`)
+      const errorText = await response.text()
+      console.error('Viator API error:', response.status, errorText)
+      throw new Error(`Viator API error: ${response.status}`)
     }
 
     const data = await response.json()
-    const activities = (data.data || []).map((a: any) => transformActivity(a, city as string || 'Unknown City'))
+    const products = data.products || []
+    const activities = products.map((p: any) => transformViatorProduct(p, city as string || 'Unknown City'))
 
     searchCache.set(cacheKey, activities)
     res.json(activities)
@@ -147,27 +165,26 @@ app.get('/api/activities/:id', async (req, res) => {
       }
     }
 
-    if (!AMADEUS_API_KEY || !AMADEUS_API_SECRET) {
+    if (!VIATOR_API_KEY) {
       return res.status(404).json({ error: 'Activity not found' })
     }
 
-    const token = await getAmadeusToken()
-
-    const response = await fetch(
-      `${AMADEUS_BASE_URL}/v1/shopping/activities/${id}`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      }
-    )
+    // Viator uses product codes - fetch the product details
+    const response = await fetch(`${VIATOR_BASE_URL}/products/${id}`, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json;version=2.0',
+        'exp-api-key': VIATOR_API_KEY,
+        'Accept-Language': 'en-US',
+      },
+    })
 
     if (!response.ok) {
-      throw new Error(`Amadeus API error: ${response.status}`)
+      throw new Error(`Viator API error: ${response.status}`)
     }
 
-    const data = await response.json()
-    const activity = transformActivity(data.data, '')
+    const product = await response.json()
+    const activity = transformViatorProduct(product, '')
 
     detailsCache.set(id, activity)
     res.json(activity)
@@ -251,7 +268,7 @@ function searchCities(query: string): City[] {
   ).slice(0, 10)
 }
 
-// Demo activities for when Amadeus API is not configured
+// Demo activities for when Viator API is not configured
 function generateDemoActivities(city: string): ActivityCard[] {
   const activities = [
     {
@@ -412,7 +429,7 @@ function generateDemoActivities(city: string): ActivityCard[] {
     latitude: 0,
     longitude: 0,
     bookingUrl: `https://example.com/book/${a.id}`,
-    source: 'amadeus' as const,
+    source: 'viator' as const,
   }))
 }
 
@@ -423,7 +440,7 @@ function getDemoActivityById(id: string): ActivityCard | null {
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`)
-  if (!AMADEUS_API_KEY || !AMADEUS_API_SECRET) {
-    console.log('Note: Amadeus API credentials not configured. Using demo data.')
+  if (!VIATOR_API_KEY) {
+    console.log('Note: Viator API key not configured. Using demo data.')
   }
 })

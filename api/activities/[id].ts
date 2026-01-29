@@ -13,67 +13,68 @@ interface ActivityCard {
   reviewCount?: number
   priceText?: string
   bookingUrl: string
-  source: 'amadeus'
+  source: 'viator'
 }
 
-const AMADEUS_API_KEY = process.env.AMADEUS_API_KEY || ''
-const AMADEUS_API_SECRET = process.env.AMADEUS_API_SECRET || ''
-const AMADEUS_BASE_URL = 'https://test.api.amadeus.com'
+const VIATOR_API_KEY = process.env.VIATOR_API_KEY || ''
+const VIATOR_BASE_URL = 'https://api.viator.com/partner'
 
-let accessToken: string | null = null
-let tokenExpiry: number = 0
-
-async function getAmadeusToken(): Promise<string> {
-  if (accessToken && Date.now() < tokenExpiry) {
-    return accessToken
-  }
-
-  const response = await fetch(`${AMADEUS_BASE_URL}/v1/security/oauth2/token`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: new URLSearchParams({
-      grant_type: 'client_credentials',
-      client_id: AMADEUS_API_KEY,
-      client_secret: AMADEUS_API_SECRET,
-    }),
-  })
-
-  if (!response.ok) {
-    throw new Error('Failed to get Amadeus access token')
-  }
-
-  const data = await response.json()
-  accessToken = data.access_token
-  tokenExpiry = Date.now() + (data.expires_in - 60) * 1000
-  return accessToken!
+// Strip HTML tags from text
+function stripHtml(html: string | undefined): string {
+  if (!html) return ''
+  return html
+    .replace(/<[^>]*>/g, '') // Remove HTML tags
+    .replace(/&nbsp;/g, ' ') // Replace &nbsp; with space
+    .replace(/&amp;/g, '&')  // Replace &amp; with &
+    .replace(/&lt;/g, '<')   // Replace &lt; with <
+    .replace(/&gt;/g, '>')   // Replace &gt; with >
+    .replace(/&quot;/g, '"') // Replace &quot; with "
+    .replace(/&#39;/g, "'")  // Replace &#39; with '
+    .replace(/\s+/g, ' ')    // Normalize whitespace
+    .trim()
 }
 
-function transformActivity(activity: any, city: string): ActivityCard {
-  const price = activity.price
+function transformViatorProduct(product: any): ActivityCard {
+  // Handle pricing - Viator uses pricing.summary.fromPrice
   let priceText: string | undefined
-
-  if (price) {
-    const amount = parseFloat(price.amount)
-    const currency = price.currencyCode || 'USD'
+  if (product.pricing?.summary?.fromPrice) {
+    const amount = parseFloat(product.pricing.summary.fromPrice)
+    const currency = product.pricing?.currency || 'USD'
     priceText = `${currency === 'USD' ? '$' : currency + ' '}${amount.toFixed(0)}`
   }
 
+  // Get the best image available
+  const heroImageUrl = product.images?.[0]?.variants?.find((v: any) => v.width >= 600)?.url
+    || product.images?.[0]?.variants?.[0]?.url
+    || 'https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=800&q=80'
+
+  // Get rating from reviews
+  const rating = product.reviews?.combinedAverageRating
+    ? parseFloat(product.reviews.combinedAverageRating.toFixed(1))
+    : undefined
+
+  const reviewCount = product.reviews?.totalReviews
+
+  // Build booking URL
+  const bookingUrl = product.productUrl || `https://www.viator.com/tours/${product.productCode}`
+
+  // Get city from destination if available
+  const city = product.destinations?.[0]?.name || ''
+
   return {
-    id: activity.id,
-    name: activity.name,
-    shortDescription: activity.shortDescription || activity.description?.substring(0, 150) || '',
-    fullDescription: activity.description,
-    heroImageUrl: activity.pictures?.[0] || 'https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=800&q=80',
+    id: product.productCode,
+    name: stripHtml(product.title),
+    shortDescription: stripHtml(product.description?.substring(0, 150) || ''),
+    fullDescription: stripHtml(product.description || ''),
+    heroImageUrl,
     city,
-    latitude: parseFloat(activity.geoCode?.latitude || 0),
-    longitude: parseFloat(activity.geoCode?.longitude || 0),
-    rating: activity.rating ? parseFloat(activity.rating) : undefined,
-    reviewCount: activity.reviews?.totalReviews,
+    latitude: product.geoLocation?.latitude || 0,
+    longitude: product.geoLocation?.longitude || 0,
+    rating,
+    reviewCount,
     priceText,
-    bookingUrl: activity.bookingLink || `https://www.amadeus.com/activities/${activity.id}`,
-    source: 'amadeus',
+    bookingUrl,
+    source: 'viator',
   }
 }
 
@@ -105,7 +106,7 @@ function getDemoActivityById(id: string): ActivityCard | null {
     latitude: 0,
     longitude: 0,
     bookingUrl: `https://example.com/book/${id}`,
-    source: 'amadeus',
+    source: 'viator',
   }
 }
 
@@ -126,27 +127,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(404).json({ error: 'Activity not found' })
     }
 
-    if (!AMADEUS_API_KEY || !AMADEUS_API_SECRET) {
+    if (!VIATOR_API_KEY) {
       return res.status(404).json({ error: 'Activity not found' })
     }
 
-    const token = await getAmadeusToken()
-
-    const response = await fetch(
-      `${AMADEUS_BASE_URL}/v1/shopping/activities/${id}`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      }
-    )
+    // Viator uses product codes - fetch the product details
+    const response = await fetch(`${VIATOR_BASE_URL}/products/${id}`, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json;version=2.0',
+        'exp-api-key': VIATOR_API_KEY,
+        'Accept-Language': 'en-US',
+      },
+    })
 
     if (!response.ok) {
-      throw new Error(`Amadeus API error: ${response.status}`)
+      throw new Error(`Viator API error: ${response.status}`)
     }
 
-    const data = await response.json()
-    const activity = transformActivity(data.data, '')
+    const product = await response.json()
+    const activity = transformViatorProduct(product)
 
     res.json(activity)
   } catch (error) {

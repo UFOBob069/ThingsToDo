@@ -11,7 +11,7 @@ export interface ActivityCard {
   reviewCount?: number
   priceText?: string
   bookingUrl: string
-  source: 'amadeus'
+  source: 'viator'
 }
 
 export interface City {

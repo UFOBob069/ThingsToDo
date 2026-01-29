@@ -11,22 +11,42 @@ function CitySearch({ onSelect }: CitySearchProps) {
   const [results, setResults] = useState<City[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [isOpen, setIsOpen] = useState(false)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
   const debounceRef = useRef<number | null>(null)
+  const abortControllerRef = useRef<AbortController | null>(null)
 
   const performSearch = useCallback(async (searchQuery: string) => {
     if (searchQuery.length < 2) {
       setResults([])
+      setIsOpen(false)
       return
     }
 
-    setIsLoading(true)
-    const response = await searchCities(searchQuery)
-    setIsLoading(false)
+    // Cancel any in-flight request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+    }
 
-    if (response.success && response.data) {
-      setResults(response.data)
-      setIsOpen(true)
+    // Create new abort controller for this request
+    abortControllerRef.current = new AbortController()
+
+    setIsLoading(true)
+
+    try {
+      const response = await searchCities(searchQuery, abortControllerRef.current.signal)
+
+      // Only update state if request wasn't aborted
+      if (response.success && response.data) {
+        setResults(response.data)
+        setIsOpen(true)
+      } else if (response.error !== 'Request aborted') {
+        // Only clear results on non-abort errors
+        setResults([])
+      }
+    } catch {
+      // Ignore errors from aborted requests
+    } finally {
+      setIsLoading(false)
     }
   }, [])
 
@@ -36,6 +56,13 @@ function CitySearch({ onSelect }: CitySearchProps) {
 
     if (debounceRef.current) {
       clearTimeout(debounceRef.current)
+    }
+
+    if (value.length < 2) {
+      setResults([])
+      setIsOpen(false)
+      setIsLoading(false)
+      return
     }
 
     debounceRef.current = window.setTimeout(() => {
@@ -57,7 +84,7 @@ function CitySearch({ onSelect }: CitySearchProps) {
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (inputRef.current && !inputRef.current.contains(e.target as Node)) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setIsOpen(false)
       }
     }
@@ -66,16 +93,20 @@ function CitySearch({ onSelect }: CitySearchProps) {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (debounceRef.current) {
         clearTimeout(debounceRef.current)
       }
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+      }
     }
   }, [])
 
   return (
-    <div className="relative" ref={inputRef}>
+    <div className="relative" ref={containerRef}>
       <div className="relative">
         <input
           type="text"

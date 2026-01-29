@@ -30,6 +30,11 @@ export interface SavedActivity extends ActivityCard {
   savedAt: number
 }
 
+export interface HistoryActivity extends ActivityCard {
+  viewedAt: number
+  action: 'saved' | 'dismissed'
+}
+
 export interface ApiResponse<T> {
   success: boolean
   data?: T

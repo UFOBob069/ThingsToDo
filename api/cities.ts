@@ -51,18 +51,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       const data = await response.json()
 
+      // Validate that we have features array
+      if (!data.features || !Array.isArray(data.features)) {
+        return res.json(searchFallbackCities(q))
+      }
+
       const cities: City[] = data.features.map((feature: any) => {
         // Extract country from context
-        const countryContext = feature.context?.find((ctx: any) => ctx.id.startsWith('country'))
+        const countryContext = feature.context?.find((ctx: any) => ctx.id?.startsWith('country'))
         const country = countryContext?.text || ''
 
         return {
-          name: feature.text,
-          latitude: feature.center[1],
-          longitude: feature.center[0],
+          name: feature.text || '',
+          latitude: feature.center?.[1] || 0,
+          longitude: feature.center?.[0] || 0,
           country,
         }
-      })
+      }).filter((city: City) => city.name) // Filter out any cities without names
 
       return res.json(cities)
     } catch (error) {

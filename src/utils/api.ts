@@ -46,17 +46,27 @@ export async function getActivityDetails(activityId: string): Promise<ApiRespons
   }
 }
 
-export async function searchCities(query: string): Promise<ApiResponse<City[]>> {
+export async function searchCities(query: string, signal?: AbortSignal): Promise<ApiResponse<City[]>> {
   try {
-    const response = await fetch(`${API_BASE}/cities?q=${encodeURIComponent(query)}`)
+    const response = await fetch(`${API_BASE}/cities?q=${encodeURIComponent(query)}`, { signal })
 
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`)
     }
 
     const data = await response.json()
+
+    // Validate response data
+    if (!Array.isArray(data)) {
+      return { success: true, data: [] }
+    }
+
     return { success: true, data }
   } catch (error) {
+    // Don't log aborted requests as errors
+    if (error instanceof Error && error.name === 'AbortError') {
+      return { success: false, error: 'Request aborted' }
+    }
     console.error('Error searching cities:', error)
     return {
       success: false,

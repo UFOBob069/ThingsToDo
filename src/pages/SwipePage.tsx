@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { City, ActivityCard } from '../types'
 import { searchActivities } from '../utils/api'
 import { useSavedActivities } from '../hooks/useSavedActivities'
+import { useActivityHistory } from '../hooks/useActivityHistory'
 import SwipeCard from '../components/SwipeCard'
 import ActivityDetailsModal from '../components/ActivityDetailsModal'
 import Header from '../components/Header'
@@ -22,6 +23,7 @@ function SwipePage({ city, onChangeCity }: SwipePageProps) {
   const [error, setError] = useState<string | null>(null)
   const [selectedActivity, setSelectedActivity] = useState<ActivityCard | null>(null)
   const { saveActivity, count: savedCount } = useSavedActivities()
+  const { addToHistory } = useActivityHistory()
 
   const loadActivities = useCallback(async () => {
     setIsLoading(true)
@@ -44,16 +46,21 @@ function SwipePage({ city, onChangeCity }: SwipePageProps) {
   }, [loadActivities])
 
   const handleSwipeLeft = useCallback(() => {
+    const currentActivity = activities[currentIndex]
+    if (currentActivity) {
+      addToHistory(currentActivity, 'dismissed')
+    }
     setCurrentIndex(prev => prev + 1)
-  }, [])
+  }, [activities, currentIndex, addToHistory])
 
   const handleSwipeRight = useCallback(() => {
     const currentActivity = activities[currentIndex]
     if (currentActivity) {
       saveActivity(currentActivity)
+      addToHistory(currentActivity, 'saved')
     }
     setCurrentIndex(prev => prev + 1)
-  }, [activities, currentIndex, saveActivity])
+  }, [activities, currentIndex, saveActivity, addToHistory])
 
   const handleViewDetails = useCallback((activity: ActivityCard) => {
     setSelectedActivity(activity)

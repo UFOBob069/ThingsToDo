@@ -158,7 +158,7 @@ function HomePage({ onCitySelect }: HomePageProps) {
       </div>
 
       <footer className="text-center py-4 text-primary-200 text-sm">
-        Powered by Amadeus
+        Powered by Viator
       </footer>
     </div>
   )

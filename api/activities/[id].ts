@@ -105,7 +105,7 @@ function getDemoActivityById(id: string): ActivityCard | null {
     city: '',
     latitude: 0,
     longitude: 0,
-    bookingUrl: `https://example.com/book/${id}`,
+    bookingUrl: `https://www.viator.com/`,
     source: 'viator',
   }
 }

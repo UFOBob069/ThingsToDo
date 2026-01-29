@@ -428,7 +428,7 @@ function generateDemoActivities(city: string): ActivityCard[] {
     city,
     latitude: 0,
     longitude: 0,
-    bookingUrl: `https://example.com/book/${a.id}`,
+    bookingUrl: `https://www.viator.com/`,
     source: 'viator' as const,
   }))
 }

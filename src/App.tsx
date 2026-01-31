@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import HomePage from './pages/HomePage'
 import SwipePage from './pages/SwipePage'
 import SavedPage from './pages/SavedPage'
+import HistoryPage from './pages/HistoryPage'
 import ActivityPage from './pages/ActivityPage'
 import { City } from './types'
 
@@ -44,6 +45,7 @@ function App() {
           }
         />
         <Route path="/saved" element={<SavedPage />} />
+        <Route path="/history" element={<HistoryPage />} />
         <Route path="/activity/:id" element={<ActivityPage />} />
       </Routes>
     </div>

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { City, ActivityCard } from '../types'
 import { searchActivities } from '../utils/api'
 import { useSavedActivities } from '../hooks/useSavedActivities'
+import { useSwipeHistory } from '../hooks/useSwipeHistory'
 import SwipeCard from '../components/SwipeCard'
 import ActivityDetailsModal from '../components/ActivityDetailsModal'
 import Header from '../components/Header'
@@ -15,7 +16,7 @@ interface SwipePageProps {
   onChangeCity: () => void
 }
 
-interface SwipeHistoryItem {
+interface SessionHistoryItem {
   activity: ActivityCard
   action: 'left' | 'right'
 }
@@ -27,12 +28,13 @@ function SwipePage({ city, onChangeCity }: SwipePageProps) {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedActivity, setSelectedActivity] = useState<ActivityCard | null>(null)
-  const [swipeHistory, setSwipeHistory] = useState<SwipeHistoryItem[]>([])
+  const [sessionHistory, setSessionHistory] = useState<SessionHistoryItem[]>([])
   const [showConfetti, setShowConfetti] = useState(false)
   const [showMilestone, setShowMilestone] = useState(false)
   const [milestoneMessage, setMilestoneMessage] = useState<string | null>(null)
   const [sessionSaves, setSessionSaves] = useState(0)
   const { saveActivity, removeActivity, count: savedCount } = useSavedActivities()
+  const { addToHistory, removeLastFromHistory } = useSwipeHistory()
 
   const loadActivities = useCallback(async () => {
     setIsLoading(true)
@@ -43,7 +45,7 @@ function SwipePage({ city, onChangeCity }: SwipePageProps) {
     if (response.success && response.data) {
       setActivities(response.data)
       setCurrentIndex(0)
-      setSwipeHistory([])
+      setSessionHistory([])
       setSessionSaves(0)
     } else {
       setError(response.error || 'Failed to load activities')
@@ -76,16 +78,18 @@ function SwipePage({ city, onChangeCity }: SwipePageProps) {
   const handleSwipeLeft = useCallback(() => {
     const currentActivity = activities[currentIndex]
     if (currentActivity) {
-      setSwipeHistory(prev => [...prev, { activity: currentActivity, action: 'left' }])
+      setSessionHistory(prev => [...prev, { activity: currentActivity, action: 'left' }])
+      addToHistory(currentActivity, 'left', city.name)
     }
     setCurrentIndex(prev => prev + 1)
-  }, [activities, currentIndex])
+  }, [activities, currentIndex, addToHistory, city.name])
 
   const handleSwipeRight = useCallback(() => {
     const currentActivity = activities[currentIndex]
     if (currentActivity) {
       saveActivity(currentActivity)
-      setSwipeHistory(prev => [...prev, { activity: currentActivity, action: 'right' }])
+      setSessionHistory(prev => [...prev, { activity: currentActivity, action: 'right' }])
+      addToHistory(currentActivity, 'right', city.name)
       setSessionSaves(prev => prev + 1)
 
       // Show confetti on first save of session or every 5th save
@@ -95,12 +99,12 @@ function SwipePage({ city, onChangeCity }: SwipePageProps) {
       }
     }
     setCurrentIndex(prev => prev + 1)
-  }, [activities, currentIndex, saveActivity, sessionSaves])
+  }, [activities, currentIndex, saveActivity, sessionSaves, addToHistory, city.name])
 
   const handleUndo = useCallback(() => {
-    if (swipeHistory.length === 0 || currentIndex === 0) return
+    if (sessionHistory.length === 0 || currentIndex === 0) return
 
-    const lastItem = swipeHistory[swipeHistory.length - 1]
+    const lastItem = sessionHistory[sessionHistory.length - 1]
 
     // If last action was a save, remove it from saved
     if (lastItem.action === 'right') {
@@ -108,9 +112,10 @@ function SwipePage({ city, onChangeCity }: SwipePageProps) {
       setSessionSaves(prev => Math.max(0, prev - 1))
     }
 
-    setSwipeHistory(prev => prev.slice(0, -1))
+    setSessionHistory(prev => prev.slice(0, -1))
+    removeLastFromHistory()
     setCurrentIndex(prev => prev - 1)
-  }, [swipeHistory, currentIndex, removeActivity])
+  }, [sessionHistory, currentIndex, removeActivity, removeLastFromHistory])
 
   const handleViewDetails = useCallback((activity: ActivityCard) => {
     setSelectedActivity(activity)
@@ -123,7 +128,7 @@ function SwipePage({ city, onChangeCity }: SwipePageProps) {
   const currentActivity = activities[currentIndex]
   const nextActivity = activities[currentIndex + 1]
   const hasMoreCards = currentIndex < activities.length
-  const canUndo = swipeHistory.length > 0 && currentIndex > 0
+  const canUndo = sessionHistory.length > 0 && currentIndex > 0
 
   if (isLoading) {
     return (
@@ -188,20 +193,6 @@ function SwipePage({ city, onChangeCity }: SwipePageProps) {
         onViewSaved={() => navigate('/saved')}
       />
 
-      {/* Undo button - top left */}
-      {canUndo && (
-        <button
-          onClick={handleUndo}
-          className="absolute top-20 left-4 z-30 bg-white/90 backdrop-blur-sm rounded-full p-2.5 shadow-lg
-                     hover:bg-white active:scale-95 transition-all duration-200 animate-fade-in"
-          aria-label="Undo last swipe"
-        >
-          <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
-          </svg>
-        </button>
-      )}
-
       {/* Milestone popup */}
       {showMilestone && milestoneMessage && (
         <div className="absolute top-1/3 left-1/2 -translate-x-1/2 z-50 animate-achievement">
@@ -237,7 +228,23 @@ function SwipePage({ city, onChangeCity }: SwipePageProps) {
       </main>
 
       <footer className="flex-shrink-0 bg-white border-t border-gray-200 safe-area-inset-bottom">
-        <div className="flex justify-center items-center gap-5 py-3 px-4">
+        <div className="flex justify-center items-center gap-3 py-3 px-4">
+          {/* Undo button */}
+          <button
+            onClick={handleUndo}
+            disabled={!canUndo}
+            className={`btn-icon w-10 h-10 bg-white border-2 shadow-md transition-all
+                      ${canUndo
+                        ? 'border-gray-300 text-gray-600 hover:bg-gray-50 active:scale-95'
+                        : 'border-gray-100 text-gray-300 cursor-not-allowed'}`}
+            aria-label="Undo last swipe"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+            </svg>
+          </button>
+
+          {/* Dismiss button */}
           <button
             onClick={handleSwipeLeft}
             className="btn-icon bg-white border-2 border-red-200 text-red-500 shadow-md hover:bg-red-50 active:scale-95"
@@ -248,6 +255,7 @@ function SwipePage({ city, onChangeCity }: SwipePageProps) {
             </svg>
           </button>
 
+          {/* Info button */}
           <button
             onClick={() => handleViewDetails(currentActivity)}
             className="btn-icon bg-white border-2 border-blue-200 text-blue-500 shadow-md hover:bg-blue-50 active:scale-95 w-12 h-12"
@@ -258,6 +266,7 @@ function SwipePage({ city, onChangeCity }: SwipePageProps) {
             </svg>
           </button>
 
+          {/* Save button */}
           <button
             onClick={handleSwipeRight}
             className="btn-icon bg-white border-2 border-green-200 text-green-500 shadow-md hover:bg-green-50 active:scale-95"
@@ -265,6 +274,17 @@ function SwipePage({ city, onChangeCity }: SwipePageProps) {
           >
             <svg className="w-7 h-7" fill="currentColor" viewBox="0 0 24 24">
               <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+            </svg>
+          </button>
+
+          {/* History button */}
+          <button
+            onClick={() => navigate('/history')}
+            className="btn-icon w-10 h-10 bg-white border-2 border-gray-300 text-gray-600 shadow-md hover:bg-gray-50 active:scale-95"
+            aria-label="View history"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           </button>
         </div>

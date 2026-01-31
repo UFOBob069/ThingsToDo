@@ -19,6 +19,56 @@ export interface ActivityCard {
 const VIATOR_API_KEY = process.env.VIATOR_API_KEY || ''
 const VIATOR_BASE_URL = 'https://api.viator.com/partner'
 
+// Cache for destination lookups
+const destinationCache: Record<string, { id: string; name: string } | null> = {}
+
+// Look up Viator destination ID from city name
+async function lookupDestination(cityName: string): Promise<{ id: string; name: string } | null> {
+  if (destinationCache[cityName.toLowerCase()]) {
+    return destinationCache[cityName.toLowerCase()]
+  }
+
+  try {
+    const response = await fetch(`${VIATOR_BASE_URL}/destinations/search`, {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json;version=2.0',
+        'Content-Type': 'application/json',
+        'exp-api-key': VIATOR_API_KEY,
+      },
+      body: JSON.stringify({
+        searchTerm: cityName,
+        searchTypes: ['CITY', 'REGION'],
+      }),
+    })
+
+    if (!response.ok) {
+      console.error('Destination lookup failed:', response.status)
+      return null
+    }
+
+    const data = await response.json()
+    const destinations = data.destinations || []
+
+    // Find the best match - prefer exact city matches
+    const match = destinations.find((d: any) =>
+      d.name.toLowerCase() === cityName.toLowerCase() ||
+      d.name.toLowerCase().startsWith(cityName.toLowerCase())
+    ) || destinations[0]
+
+    if (match) {
+      const result = { id: match.destinationId.toString(), name: match.name }
+      destinationCache[cityName.toLowerCase()] = result
+      return result
+    }
+  } catch (error) {
+    console.error('Error looking up destination:', error)
+  }
+
+  destinationCache[cityName.toLowerCase()] = null
+  return null
+}
+
 // Strip HTML tags from text
 function stripHtml(html: string | undefined): string {
   if (!html) return ''
@@ -55,8 +105,11 @@ function transformViatorProduct(product: any, city: string): ActivityCard {
 
   const reviewCount = product.reviews?.totalReviews
 
-  // Build booking URL
-  const bookingUrl = product.productUrl || `https://www.viator.com/tours/${product.productCode}`
+  // Build booking URL - use the webURL field which contains the direct product link
+  // Viator products have a webURL field with the direct deep link
+  const bookingUrl = product.productUrl
+    || product.webURL
+    || `https://www.viator.com/searchResults/all?text=${encodeURIComponent(product.title || product.productCode)}`
 
   return {
     id: product.productCode,
@@ -253,11 +306,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.json(demoActivities)
     }
 
-    // Viator uses a freetext search with location filtering
-    // We'll search for products near the given coordinates
-    const searchPayload = {
+    // Look up the destination ID for this city
+    const cityName = city as string || 'Unknown City'
+    const destination = await lookupDestination(cityName)
+
+    // Build search payload with proper destination ID
+    const searchPayload: any = {
       filtering: {
-        destination: city as string || undefined,
         lowestPrice: 0,
         highestPrice: 500,
       },
@@ -267,9 +322,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       },
       pagination: {
         start: 1,
-        count: 30,
+        count: 50,  // Request more results
       },
       currency: 'USD',
+    }
+
+    // Use destination ID if we found one, otherwise try text search
+    if (destination) {
+      searchPayload.filtering.destination = destination.id
+    } else {
+      // Fallback to text-based search
+      searchPayload.searchTerm = cityName
     }
 
     const response = await fetch(`${VIATOR_BASE_URL}/products/search`, {

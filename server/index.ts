@@ -17,6 +17,56 @@ app.use(express.json())
 const VIATOR_API_KEY = process.env.VIATOR_API_KEY || ''
 const VIATOR_BASE_URL = 'https://api.viator.com/partner'
 
+// Cache for destination lookups
+const destinationCache: Record<string, { id: string; name: string } | null> = {}
+
+// Look up Viator destination ID from city name
+async function lookupDestination(cityName: string): Promise<{ id: string; name: string } | null> {
+  if (destinationCache[cityName.toLowerCase()]) {
+    return destinationCache[cityName.toLowerCase()]
+  }
+
+  try {
+    const response = await fetch(`${VIATOR_BASE_URL}/destinations/search`, {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json;version=2.0',
+        'Content-Type': 'application/json',
+        'exp-api-key': VIATOR_API_KEY,
+      },
+      body: JSON.stringify({
+        searchTerm: cityName,
+        searchTypes: ['CITY', 'REGION'],
+      }),
+    })
+
+    if (!response.ok) {
+      console.error('Destination lookup failed:', response.status)
+      return null
+    }
+
+    const data = await response.json()
+    const destinations = data.destinations || []
+
+    // Find the best match - prefer exact city matches
+    const match = destinations.find((d: any) =>
+      d.name.toLowerCase() === cityName.toLowerCase() ||
+      d.name.toLowerCase().startsWith(cityName.toLowerCase())
+    ) || destinations[0]
+
+    if (match) {
+      const result = { id: match.destinationId.toString(), name: match.name }
+      destinationCache[cityName.toLowerCase()] = result
+      return result
+    }
+  } catch (error) {
+    console.error('Error looking up destination:', error)
+  }
+
+  destinationCache[cityName.toLowerCase()] = null
+  return null
+}
+
 // Strip HTML tags from text
 function stripHtml(html: string | undefined): string {
   if (!html) return ''
@@ -54,8 +104,10 @@ function transformViatorProduct(product: any, city: string): ActivityCard {
 
   const reviewCount = product.reviews?.totalReviews
 
-  // Build booking URL
-  const bookingUrl = product.productUrl || `https://www.viator.com/tours/${product.productCode}`
+  // Build booking URL - use the webURL field which contains the direct product link
+  const bookingUrl = product.productUrl
+    || product.webURL
+    || `https://www.viator.com/searchResults/all?text=${encodeURIComponent(product.title || product.productCode)}`
 
   return {
     id: product.productCode,
@@ -97,10 +149,13 @@ app.get('/api/activities', async (req, res) => {
       return res.json(demoActivities)
     }
 
-    // Viator uses a freetext search with location filtering
-    const searchPayload = {
+    // Look up the destination ID for this city
+    const cityName = city as string || 'Unknown City'
+    const destination = await lookupDestination(cityName)
+
+    // Build search payload with proper destination ID
+    const searchPayload: any = {
       filtering: {
-        destination: city as string || undefined,
         lowestPrice: 0,
         highestPrice: 500,
       },
@@ -110,9 +165,17 @@ app.get('/api/activities', async (req, res) => {
       },
       pagination: {
         start: 1,
-        count: 30,
+        count: 50,  // Request more results
       },
       currency: 'USD',
+    }
+
+    // Use destination ID if we found one, otherwise try text search
+    if (destination) {
+      searchPayload.filtering.destination = destination.id
+    } else {
+      // Fallback to text-based search
+      searchPayload.searchTerm = cityName
     }
 
     const response = await fetch(`${VIATOR_BASE_URL}/products/search`, {
@@ -243,6 +306,19 @@ const POPULAR_CITIES: City[] = [
   { name: 'Las Vegas', latitude: 36.1699, longitude: -115.1398, country: 'USA' },
   { name: 'Seattle', latitude: 47.6062, longitude: -122.3321, country: 'USA' },
   { name: 'Boston', latitude: 42.3601, longitude: -71.0589, country: 'USA' },
+  { name: 'Austin', latitude: 30.2672, longitude: -97.7431, country: 'USA' },
+  { name: 'Denver', latitude: 39.7392, longitude: -104.9903, country: 'USA' },
+  { name: 'Nashville', latitude: 36.1627, longitude: -86.7816, country: 'USA' },
+  { name: 'New Orleans', latitude: 29.9511, longitude: -90.0715, country: 'USA' },
+  { name: 'San Diego', latitude: 32.7157, longitude: -117.1611, country: 'USA' },
+  { name: 'Portland', latitude: 45.5152, longitude: -122.6784, country: 'USA' },
+  { name: 'Atlanta', latitude: 33.7490, longitude: -84.3880, country: 'USA' },
+  { name: 'Philadelphia', latitude: 39.9526, longitude: -75.1652, country: 'USA' },
+  { name: 'Houston', latitude: 29.7604, longitude: -95.3698, country: 'USA' },
+  { name: 'Dallas', latitude: 32.7767, longitude: -96.7970, country: 'USA' },
+  { name: 'Phoenix', latitude: 33.4484, longitude: -112.0740, country: 'USA' },
+  { name: 'Orlando', latitude: 28.5383, longitude: -81.3792, country: 'USA' },
+  { name: 'Honolulu', latitude: 21.3069, longitude: -157.8583, country: 'USA' },
   { name: 'London', latitude: 51.5074, longitude: -0.1278, country: 'UK' },
   { name: 'Paris', latitude: 48.8566, longitude: 2.3522, country: 'France' },
   { name: 'Rome', latitude: 41.9028, longitude: 12.4964, country: 'Italy' },

@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { useSwipeGesture } from '../hooks/useSwipeGesture'
 import { ActivityCard } from '../types'
 
@@ -7,7 +8,10 @@ interface SwipeCardProps {
   onSwipeRight?: () => void
   onViewDetails?: () => void
   isBackground?: boolean
+  cardIndex?: number
 }
+
+type CardEffect = 'none' | 'golden' | 'rainbow' | 'sparkle' | 'fire' | 'ice'
 
 function SwipeCard({
   activity,
@@ -15,6 +19,7 @@ function SwipeCard({
   onSwipeRight,
   onViewDetails,
   isBackground = false,
+  cardIndex = 0,
 }: SwipeCardProps) {
   const {
     cardRef,
@@ -26,6 +31,62 @@ function SwipeCard({
     onSwipeLeft,
     onSwipeRight,
   })
+
+  // Determine special effect based on card properties
+  const specialEffect: CardEffect = useMemo(() => {
+    // High-rated activities (4.8+) get golden glow
+    if (activity.rating && activity.rating >= 4.8) {
+      return 'golden'
+    }
+    // Popular activities (1000+ reviews) get rainbow effect
+    if (activity.reviewCount && activity.reviewCount >= 1000) {
+      return 'rainbow'
+    }
+    // Random sparkle effect (15% chance)
+    const seed = cardIndex + activity.id.charCodeAt(0)
+    if (seed % 7 === 0) {
+      return 'sparkle'
+    }
+    // Expensive activities get fire effect
+    if (activity.priceText && parseInt(activity.priceText.replace(/\D/g, '')) >= 100) {
+      return 'fire'
+    }
+    return 'none'
+  }, [activity, cardIndex])
+
+  const getEffectClasses = () => {
+    switch (specialEffect) {
+      case 'golden':
+        return 'card-golden'
+      case 'rainbow':
+        return 'card-rainbow'
+      case 'sparkle':
+        return 'card-sparkle'
+      case 'fire':
+        return 'card-fire'
+      case 'ice':
+        return 'card-ice'
+      default:
+        return ''
+    }
+  }
+
+  const getEffectBadge = () => {
+    switch (specialEffect) {
+      case 'golden':
+        return { icon: '⭐', label: 'Top Rated' }
+      case 'rainbow':
+        return { icon: '🌟', label: 'Popular' }
+      case 'sparkle':
+        return { icon: '✨', label: 'Hidden Gem' }
+      case 'fire':
+        return { icon: '🔥', label: 'Premium' }
+      default:
+        return null
+    }
+  }
+
+  const badge = getEffectBadge()
 
   if (isBackground) {
     return (
@@ -45,7 +106,8 @@ function SwipeCard({
       ref={cardRef}
       style={cardStyle}
       className={`w-full h-full bg-white rounded-2xl card-shadow overflow-hidden cursor-grab
-                  ${isDragging ? 'cursor-grabbing' : ''} will-change-transform backface-hidden`}
+                  ${isDragging ? 'cursor-grabbing' : ''} will-change-transform backface-hidden
+                  ${getEffectClasses()}`}
     >
       <div className="relative h-full">
         <div
@@ -56,6 +118,37 @@ function SwipeCard({
         />
 
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+
+        {/* Sparkle overlay for special cards */}
+        {specialEffect === 'sparkle' && (
+          <div className="absolute inset-0 pointer-events-none overflow-hidden">
+            {[...Array(6)].map((_, i) => (
+              <div
+                key={i}
+                className="sparkle-particle"
+                style={{
+                  left: `${15 + Math.random() * 70}%`,
+                  top: `${10 + Math.random() * 40}%`,
+                  animationDelay: `${i * 0.3}s`,
+                }}
+              />
+            ))}
+          </div>
+        )}
+
+        {/* Special badge */}
+        {badge && (
+          <div className="absolute top-4 left-4 z-10 animate-bounce-in">
+            <div className={`px-3 py-1.5 rounded-full text-sm font-semibold flex items-center gap-1.5 shadow-lg
+                          ${specialEffect === 'golden' ? 'bg-gradient-to-r from-yellow-400 to-amber-500 text-amber-900' : ''}
+                          ${specialEffect === 'rainbow' ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white' : ''}
+                          ${specialEffect === 'sparkle' ? 'bg-gradient-to-r from-blue-400 to-cyan-400 text-white' : ''}
+                          ${specialEffect === 'fire' ? 'bg-gradient-to-r from-orange-500 to-red-500 text-white' : ''}`}>
+              <span>{badge.icon}</span>
+              <span>{badge.label}</span>
+            </div>
+          </div>
+        )}
 
         <div
           className="swipe-indicator left-4 border-green-500 text-green-500"
@@ -94,7 +187,7 @@ function SwipeCard({
                     <span className="font-medium">{activity.rating.toFixed(1)}</span>
                     {activity.reviewCount !== undefined && (
                       <span className="text-white/70 text-sm">
-                        ({activity.reviewCount})
+                        ({activity.reviewCount.toLocaleString()})
                       </span>
                     )}
                   </div>

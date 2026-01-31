@@ -65,6 +65,71 @@
            font-bold text-2xl uppercase tracking-wide border-4
            transform rotate-[-20deg] opacity-0 transition-opacity;
   }
+
+  /* Special Card Effects */
+  .card-golden {
+    animation: golden-glow 2s ease-in-out infinite;
+    box-shadow: 0 0 30px rgba(255, 193, 7, 0.4),
+                0 10px 40px -10px rgba(0, 0, 0, 0.3);
+  }
+
+  .card-rainbow {
+    animation: rainbow-border 3s linear infinite;
+    position: relative;
+  }
+
+  .card-rainbow::before {
+    content: '';
+    position: absolute;
+    inset: -3px;
+    border-radius: 1rem;
+    padding: 3px;
+    background: linear-gradient(45deg, #ff0000, #ff7f00, #ffff00, #00ff00, #0000ff, #4b0082, #8f00ff, #ff0000);
+    background-size: 400% 400%;
+    animation: rainbow-move 3s linear infinite;
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    z-index: -1;
+  }
+
+  .card-sparkle {
+    animation: sparkle-glow 1.5s ease-in-out infinite;
+  }
+
+  .card-fire {
+    animation: fire-glow 1s ease-in-out infinite;
+    box-shadow: 0 0 20px rgba(255, 69, 0, 0.5),
+                0 0 40px rgba(255, 140, 0, 0.3);
+  }
+
+  .card-ice {
+    box-shadow: 0 0 30px rgba(135, 206, 250, 0.5),
+                0 10px 40px -10px rgba(0, 0, 0, 0.3);
+  }
+
+  /* Sparkle particles */
+  .sparkle-particle {
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    background: radial-gradient(circle, #fff 0%, transparent 70%);
+    border-radius: 50%;
+    animation: sparkle-float 2s ease-in-out infinite;
+    pointer-events: none;
+  }
+
+  .sparkle-particle::before {
+    content: '✦';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: #fff;
+    font-size: 12px;
+    text-shadow: 0 0 10px #fff, 0 0 20px #87ceeb;
+  }
 }
 
 @layer utilities {
@@ -96,10 +161,124 @@
   to { transform: translateY(0); }
 }
 
+@keyframes bounce-in {
+  0% { transform: scale(0); opacity: 0; }
+  50% { transform: scale(1.2); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes confetti-fall {
+  0% {
+    transform: translateY(0) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(100vh) rotate(720deg);
+    opacity: 0;
+  }
+}
+
+@keyframes golden-glow {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(255, 193, 7, 0.3),
+                0 0 40px rgba(255, 193, 7, 0.2),
+                0 10px 40px -10px rgba(0, 0, 0, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 30px rgba(255, 193, 7, 0.5),
+                0 0 60px rgba(255, 193, 7, 0.3),
+                0 10px 40px -10px rgba(0, 0, 0, 0.3);
+  }
+}
+
+@keyframes rainbow-move {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 400% 50%; }
+}
+
+@keyframes sparkle-glow {
+  0%, 100% {
+    box-shadow: 0 0 15px rgba(135, 206, 250, 0.4),
+                0 0 30px rgba(135, 206, 250, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 25px rgba(135, 206, 250, 0.6),
+                0 0 50px rgba(135, 206, 250, 0.3);
+  }
+}
+
+@keyframes sparkle-float {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+    opacity: 0.8;
+  }
+  50% {
+    transform: translateY(-10px) scale(1.2);
+    opacity: 1;
+  }
+}
+
+@keyframes fire-glow {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(255, 69, 0, 0.4),
+                0 0 40px rgba(255, 140, 0, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 30px rgba(255, 69, 0, 0.6),
+                0 0 60px rgba(255, 140, 0, 0.4);
+  }
+}
+
+@keyframes achievement {
+  0% {
+    transform: translate(-50%, -50%) scale(0);
+    opacity: 0;
+  }
+  20% {
+    transform: translate(-50%, -50%) scale(1.1);
+    opacity: 1;
+  }
+  80% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -100%) scale(0.8);
+    opacity: 0;
+  }
+}
+
+@keyframes pulse-ring {
+  0% {
+    transform: scale(0.8);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+}
+
 .animate-fade-in {
   animation: fade-in 0.2s ease-out;
 }
 
 .animate-slide-up {
   animation: slide-up 0.3s ease-out;
+}
+
+.animate-bounce-in {
+  animation: bounce-in 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+.animate-confetti-fall {
+  animation: confetti-fall 2s ease-out forwards;
+}
+
+.animate-achievement {
+  animation: achievement 2s ease-out forwards;
+}
+
+.animate-pulse-ring {
+  animation: pulse-ring 1s ease-out infinite;
 }

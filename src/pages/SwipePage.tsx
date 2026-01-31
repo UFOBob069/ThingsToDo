@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { City, ActivityCard } from '../types'
 import { searchActivities } from '../utils/api'
@@ -8,10 +8,16 @@ import ActivityDetailsModal from '../components/ActivityDetailsModal'
 import Header from '../components/Header'
 import EmptyState from '../components/EmptyState'
 import LoadingState from '../components/LoadingState'
+import Confetti from '../components/Confetti'
 
 interface SwipePageProps {
   city: City
   onChangeCity: () => void
+}
+
+interface SwipeHistoryItem {
+  activity: ActivityCard
+  action: 'left' | 'right'
 }
 
 function SwipePage({ city, onChangeCity }: SwipePageProps) {
@@ -21,7 +27,13 @@ function SwipePage({ city, onChangeCity }: SwipePageProps) {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedActivity, setSelectedActivity] = useState<ActivityCard | null>(null)
-  const { saveActivity, count: savedCount } = useSavedActivities()
+  const [swipeHistory, setSwipeHistory] = useState<SwipeHistoryItem[]>([])
+  const [streak, setStreak] = useState(0)
+  const [showConfetti, setShowConfetti] = useState(false)
+  const [showStreakPopup, setShowStreakPopup] = useState(false)
+  const [lastAchievement, setLastAchievement] = useState<string | null>(null)
+  const streakTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const { saveActivity, removeActivity, count: savedCount } = useSavedActivities()
 
   const loadActivities = useCallback(async () => {
     setIsLoading(true)
@@ -32,6 +44,8 @@ function SwipePage({ city, onChangeCity }: SwipePageProps) {
     if (response.success && response.data) {
       setActivities(response.data)
       setCurrentIndex(0)
+      setSwipeHistory([])
+      setStreak(0)
     } else {
       setError(response.error || 'Failed to load activities')
     }
@@ -43,17 +57,75 @@ function SwipePage({ city, onChangeCity }: SwipePageProps) {
     loadActivities()
   }, [loadActivities])
 
+  // Check for streak achievements
+  useEffect(() => {
+    if (streak > 0 && streak % 5 === 0) {
+      const achievements: Record<number, string> = {
+        5: '🔥 On Fire!',
+        10: '⚡ Super Saver!',
+        15: '🌟 Activity Hunter!',
+        20: '👑 Legend!',
+        25: '🚀 Unstoppable!',
+      }
+      const achievement = achievements[streak]
+      if (achievement) {
+        setLastAchievement(achievement)
+        setShowStreakPopup(true)
+        setTimeout(() => setShowStreakPopup(false), 2000)
+      }
+    }
+  }, [streak])
+
   const handleSwipeLeft = useCallback(() => {
+    const currentActivity = activities[currentIndex]
+    if (currentActivity) {
+      setSwipeHistory(prev => [...prev, { activity: currentActivity, action: 'left' }])
+    }
+    setStreak(0) // Reset streak on skip
     setCurrentIndex(prev => prev + 1)
-  }, [])
+  }, [activities, currentIndex])
 
   const handleSwipeRight = useCallback(() => {
     const currentActivity = activities[currentIndex]
     if (currentActivity) {
       saveActivity(currentActivity)
+      setSwipeHistory(prev => [...prev, { activity: currentActivity, action: 'right' }])
+
+      // Increment streak
+      const newStreak = streak + 1
+      setStreak(newStreak)
+
+      // Show confetti on every 3rd save or milestone
+      if (newStreak % 3 === 0 || newStreak === 1) {
+        setShowConfetti(true)
+        setTimeout(() => setShowConfetti(false), 2000)
+      }
+
+      // Reset streak timeout
+      if (streakTimeoutRef.current) {
+        clearTimeout(streakTimeoutRef.current)
+      }
+      streakTimeoutRef.current = setTimeout(() => {
+        setStreak(0)
+      }, 10000) // Reset streak if no save within 10 seconds
     }
     setCurrentIndex(prev => prev + 1)
-  }, [activities, currentIndex, saveActivity])
+  }, [activities, currentIndex, saveActivity, streak])
+
+  const handleUndo = useCallback(() => {
+    if (swipeHistory.length === 0 || currentIndex === 0) return
+
+    const lastItem = swipeHistory[swipeHistory.length - 1]
+
+    // If last action was a save, remove it from saved
+    if (lastItem.action === 'right') {
+      removeActivity(lastItem.activity.id)
+      setStreak(prev => Math.max(0, prev - 1))
+    }
+
+    setSwipeHistory(prev => prev.slice(0, -1))
+    setCurrentIndex(prev => prev - 1)
+  }, [swipeHistory, currentIndex, removeActivity])
 
   const handleViewDetails = useCallback((activity: ActivityCard) => {
     setSelectedActivity(activity)
@@ -66,6 +138,7 @@ function SwipePage({ city, onChangeCity }: SwipePageProps) {
   const currentActivity = activities[currentIndex]
   const nextActivity = activities[currentIndex + 1]
   const hasMoreCards = currentIndex < activities.length
+  const canUndo = swipeHistory.length > 0 && currentIndex > 0
 
   if (isLoading) {
     return (
@@ -130,6 +203,40 @@ function SwipePage({ city, onChangeCity }: SwipePageProps) {
         onViewSaved={() => navigate('/saved')}
       />
 
+      {/* Undo button - top left */}
+      {canUndo && (
+        <button
+          onClick={handleUndo}
+          className="absolute top-20 left-4 z-30 bg-white/90 backdrop-blur-sm rounded-full p-2.5 shadow-lg
+                     hover:bg-white active:scale-95 transition-all duration-200 animate-fade-in"
+          aria-label="Undo last swipe"
+        >
+          <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+          </svg>
+        </button>
+      )}
+
+      {/* Streak indicator */}
+      {streak > 0 && (
+        <div className="absolute top-20 right-4 z-30 animate-bounce-in">
+          <div className="bg-gradient-to-r from-orange-500 to-red-500 text-white px-3 py-1.5 rounded-full shadow-lg flex items-center gap-1.5">
+            <span className="text-lg">🔥</span>
+            <span className="font-bold">{streak}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Achievement popup */}
+      {showStreakPopup && lastAchievement && (
+        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 z-50 animate-achievement">
+          <div className="bg-gradient-to-r from-purple-600 to-pink-600 text-white px-6 py-3 rounded-2xl shadow-2xl">
+            <div className="text-2xl font-bold text-center">{lastAchievement}</div>
+            <div className="text-sm text-center opacity-90">{streak} saves in a row!</div>
+          </div>
+        </div>
+      )}
+
       <main className="flex-1 relative overflow-hidden min-h-0">
         <div className="absolute inset-0 flex items-center justify-center p-3">
           <div className="relative w-full max-w-md h-full">
@@ -148,6 +255,7 @@ function SwipePage({ city, onChangeCity }: SwipePageProps) {
               onSwipeLeft={handleSwipeLeft}
               onSwipeRight={handleSwipeRight}
               onViewDetails={() => handleViewDetails(currentActivity)}
+              cardIndex={currentIndex}
             />
           </div>
         </div>
@@ -197,6 +305,8 @@ function SwipePage({ city, onChangeCity }: SwipePageProps) {
           onClose={handleCloseDetails}
         />
       )}
+
+      {showConfetti && <Confetti />}
     </div>
   )
 }

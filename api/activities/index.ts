@@ -292,9 +292,23 @@ function generateDemoActivities(city: string): ActivityCard[] {
   }))
 }
 
+// Viator tag IDs for activity types
+const VIATOR_TAGS: Record<string, string> = {
+  'tours': '21911',      // Tours & Sightseeing
+  'food': '21909',       // Food & Drink
+  'outdoor': '21917',    // Outdoor Activities
+  'culture': '21913',    // Art & Culture
+  'adventure': '21915',  // Adventure & Extreme
+  'water': '21919',      // Water Activities
+  'nightlife': '21921',  // Nightlife
+  'wellness': '21923',   // Wellness & Spas
+  'classes': '21925',    // Classes & Workshops
+  'transport': '21927',  // Transportation
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
-    const { latitude, longitude, city } = req.query
+    const { latitude, longitude, city, destinationId, activityType } = req.query
 
     if (!latitude || !longitude) {
       return res.status(400).json({ error: 'Latitude and longitude are required' })
@@ -306,11 +320,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.json(demoActivities)
     }
 
-    // Look up the destination ID for this city
     const cityName = city as string || 'Unknown City'
-    const destination = await lookupDestination(cityName)
 
-    // Build search payload with proper destination ID
+    // Build search payload
     const searchPayload: any = {
       filtering: {
         lowestPrice: 0,
@@ -322,17 +334,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       },
       pagination: {
         start: 1,
-        count: 50,  // Request more results
+        count: 50,
       },
       currency: 'USD',
     }
 
-    // Use destination ID if we found one, otherwise try text search
-    if (destination) {
-      searchPayload.filtering.destination = destination.id
+    // Use provided destinationId, or look it up from city name
+    if (destinationId) {
+      searchPayload.filtering.destination = destinationId
     } else {
-      // Fallback to text-based search
-      searchPayload.searchTerm = cityName
+      const destination = await lookupDestination(cityName)
+      if (destination) {
+        searchPayload.filtering.destination = destination.id
+      } else {
+        searchPayload.searchTerm = cityName
+      }
+    }
+
+    // Add activity type filter if specified
+    if (activityType && activityType !== 'all' && VIATOR_TAGS[activityType as string]) {
+      searchPayload.filtering.tags = [VIATOR_TAGS[activityType as string]]
     }
 
     const response = await fetch(`${VIATOR_BASE_URL}/products/search`, {

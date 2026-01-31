@@ -2,13 +2,23 @@ import { ActivityCard, City, ApiResponse } from '../types'
 
 const API_BASE = '/api'
 
-export async function searchActivities(city: City): Promise<ApiResponse<ActivityCard[]>> {
+export async function searchActivities(city: City, activityType?: string): Promise<ApiResponse<ActivityCard[]>> {
   try {
     const params = new URLSearchParams({
       latitude: city.latitude.toString(),
       longitude: city.longitude.toString(),
       city: city.name,
     })
+
+    // Pass destinationId if available for more accurate results
+    if (city.destinationId) {
+      params.set('destinationId', city.destinationId)
+    }
+
+    // Pass activity type filter if specified
+    if (activityType && activityType !== 'all') {
+      params.set('activityType', activityType)
+    }
 
     const response = await fetch(`${API_BASE}/activities?${params}`)
 

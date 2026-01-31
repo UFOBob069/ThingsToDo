@@ -21,6 +21,18 @@ interface SessionHistoryItem {
   action: 'left' | 'right'
 }
 
+// Activity type filters
+const ACTIVITY_TYPES = [
+  { id: 'all', label: 'All', icon: '🎯' },
+  { id: 'tours', label: 'Tours', icon: '🚶' },
+  { id: 'food', label: 'Food', icon: '🍽️' },
+  { id: 'outdoor', label: 'Outdoor', icon: '🏔️' },
+  { id: 'culture', label: 'Culture', icon: '🎭' },
+  { id: 'adventure', label: 'Adventure', icon: '🎢' },
+  { id: 'water', label: 'Water', icon: '🌊' },
+  { id: 'nightlife', label: 'Nightlife', icon: '🌙' },
+]
+
 function SwipePage({ city, onChangeCity }: SwipePageProps) {
   const navigate = useNavigate()
   const [activities, setActivities] = useState<ActivityCard[]>([])
@@ -33,6 +45,7 @@ function SwipePage({ city, onChangeCity }: SwipePageProps) {
   const [showMilestone, setShowMilestone] = useState(false)
   const [milestoneMessage, setMilestoneMessage] = useState<string | null>(null)
   const [sessionSaves, setSessionSaves] = useState(0)
+  const [activityType, setActivityType] = useState('all')
   const { saveActivity, removeActivity, count: savedCount } = useSavedActivities()
   const { addToHistory, removeLastFromHistory } = useSwipeHistory()
 
@@ -40,7 +53,7 @@ function SwipePage({ city, onChangeCity }: SwipePageProps) {
     setIsLoading(true)
     setError(null)
 
-    const response = await searchActivities(city)
+    const response = await searchActivities(city, activityType)
 
     if (response.success && response.data) {
       setActivities(response.data)
@@ -52,11 +65,17 @@ function SwipePage({ city, onChangeCity }: SwipePageProps) {
     }
 
     setIsLoading(false)
-  }, [city])
+  }, [city, activityType])
 
   useEffect(() => {
     loadActivities()
   }, [loadActivities])
+
+  const handleTypeChange = useCallback((type: string) => {
+    if (type !== activityType) {
+      setActivityType(type)
+    }
+  }, [activityType])
 
   // Check for milestone achievements based on total saved count
   useEffect(() => {
@@ -192,6 +211,25 @@ function SwipePage({ city, onChangeCity }: SwipePageProps) {
         onChangeCity={onChangeCity}
         onViewSaved={() => navigate('/saved')}
       />
+
+      {/* Activity type filter bar */}
+      <div className="flex-shrink-0 bg-white border-b border-gray-200 px-2 py-2">
+        <div className="flex gap-2 overflow-x-auto scrollbar-hide">
+          {ACTIVITY_TYPES.map((type) => (
+            <button
+              key={type.id}
+              onClick={() => handleTypeChange(type.id)}
+              className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all
+                ${activityType === type.id
+                  ? 'bg-primary-500 text-white shadow-md'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+            >
+              <span>{type.icon}</span>
+              <span>{type.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
 
       {/* Milestone popup */}
       {showMilestone && milestoneMessage && (

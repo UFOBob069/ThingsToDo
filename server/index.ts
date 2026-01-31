@@ -126,16 +126,30 @@ function transformViatorProduct(product: any, city: string): ActivityCard {
   }
 }
 
+// Viator tag IDs for activity types
+const VIATOR_TAGS: Record<string, string> = {
+  'tours': '21911',      // Tours & Sightseeing
+  'food': '21909',       // Food & Drink
+  'outdoor': '21917',    // Outdoor Activities
+  'culture': '21913',    // Art & Culture
+  'adventure': '21915',  // Adventure & Extreme
+  'water': '21919',      // Water Activities
+  'nightlife': '21921',  // Nightlife
+  'wellness': '21923',   // Wellness & Spas
+  'classes': '21925',    // Classes & Workshops
+  'transport': '21927',  // Transportation
+}
+
 // Search activities endpoint
 app.get('/api/activities', async (req, res) => {
   try {
-    const { latitude, longitude, city } = req.query
+    const { latitude, longitude, city, destinationId, activityType } = req.query
 
     if (!latitude || !longitude) {
       return res.status(400).json({ error: 'Latitude and longitude are required' })
     }
 
-    const cacheKey = `activities-${latitude}-${longitude}`
+    const cacheKey = `activities-${destinationId || latitude}-${longitude}-${activityType || 'all'}`
     const cached = searchCache.get<ActivityCard[]>(cacheKey)
 
     if (cached) {
@@ -149,11 +163,9 @@ app.get('/api/activities', async (req, res) => {
       return res.json(demoActivities)
     }
 
-    // Look up the destination ID for this city
     const cityName = city as string || 'Unknown City'
-    const destination = await lookupDestination(cityName)
 
-    // Build search payload with proper destination ID
+    // Build search payload
     const searchPayload: any = {
       filtering: {
         lowestPrice: 0,
@@ -165,17 +177,26 @@ app.get('/api/activities', async (req, res) => {
       },
       pagination: {
         start: 1,
-        count: 50,  // Request more results
+        count: 50,
       },
       currency: 'USD',
     }
 
-    // Use destination ID if we found one, otherwise try text search
-    if (destination) {
-      searchPayload.filtering.destination = destination.id
+    // Use provided destinationId, or look it up from city name
+    if (destinationId) {
+      searchPayload.filtering.destination = destinationId
     } else {
-      // Fallback to text-based search
-      searchPayload.searchTerm = cityName
+      const destination = await lookupDestination(cityName)
+      if (destination) {
+        searchPayload.filtering.destination = destination.id
+      } else {
+        searchPayload.searchTerm = cityName
+      }
+    }
+
+    // Add activity type filter if specified
+    if (activityType && activityType !== 'all' && VIATOR_TAGS[activityType as string]) {
+      searchPayload.filtering.tags = [VIATOR_TAGS[activityType as string]]
     }
 
     const response = await fetch(`${VIATOR_BASE_URL}/products/search`, {
@@ -257,7 +278,7 @@ app.get('/api/activities/:id', async (req, res) => {
   }
 })
 
-// City search endpoint
+// City search endpoint - uses Viator destinations API for accurate results
 app.get('/api/cities', async (req, res) => {
   try {
     const { q } = req.query
@@ -266,12 +287,51 @@ app.get('/api/cities', async (req, res) => {
       return res.json([])
     }
 
-    // Use a curated list of popular cities for demo
-    const cities = searchCities(q)
+    // If no API key, fall back to hardcoded list
+    if (!VIATOR_API_KEY) {
+      const cities = searchCities(q)
+      return res.json(cities)
+    }
+
+    // Use Viator's destinations search for accurate results
+    const response = await fetch(`${VIATOR_BASE_URL}/destinations/search`, {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json;version=2.0',
+        'Content-Type': 'application/json',
+        'exp-api-key': VIATOR_API_KEY,
+      },
+      body: JSON.stringify({
+        searchTerm: q,
+        searchTypes: ['CITY', 'REGION'],
+      }),
+    })
+
+    if (!response.ok) {
+      console.error('Viator destinations search failed:', response.status)
+      // Fall back to hardcoded list
+      const cities = searchCities(q)
+      return res.json(cities)
+    }
+
+    const data = await response.json()
+    const destinations = data.destinations || []
+
+    // Transform Viator destinations to our City format
+    const cities = destinations.slice(0, 15).map((d: any) => ({
+      name: d.name,
+      latitude: d.center?.latitude || 0,
+      longitude: d.center?.longitude || 0,
+      country: d.parentDestinationName || d.countryName || '',
+      destinationId: d.destinationId?.toString(),
+    }))
+
     res.json(cities)
   } catch (error) {
     console.error('Error searching cities:', error)
-    res.json([])
+    // Fall back to hardcoded list on error
+    const cities = searchCities(req.query.q as string)
+    res.json(cities)
   }
 })
 

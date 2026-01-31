@@ -19,6 +19,7 @@ export interface City {
   latitude: number
   longitude: number
   country?: string
+  destinationId?: string  // Viator destination ID for accurate searches
 }
 
 export interface SwipeDirection {

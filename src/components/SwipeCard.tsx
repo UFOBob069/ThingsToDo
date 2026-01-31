@@ -11,7 +11,7 @@ interface SwipeCardProps {
   cardIndex?: number
 }
 
-type CardEffect = 'none' | 'golden' | 'rainbow' | 'sparkle' | 'fire' | 'ice'
+type CardEffect = 'none' | 'golden' | 'rainbow' | 'sparkle' | 'fire'
 
 function SwipeCard({
   activity,
@@ -64,8 +64,6 @@ function SwipeCard({
         return 'card-sparkle'
       case 'fire':
         return 'card-fire'
-      case 'ice':
-        return 'card-ice'
       default:
         return ''
     }

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { City, ActivityCard } from '../types'
 import { searchActivities } from '../utils/api'
@@ -28,11 +28,10 @@ function SwipePage({ city, onChangeCity }: SwipePageProps) {
   const [error, setError] = useState<string | null>(null)
   const [selectedActivity, setSelectedActivity] = useState<ActivityCard | null>(null)
   const [swipeHistory, setSwipeHistory] = useState<SwipeHistoryItem[]>([])
-  const [streak, setStreak] = useState(0)
   const [showConfetti, setShowConfetti] = useState(false)
-  const [showStreakPopup, setShowStreakPopup] = useState(false)
-  const [lastAchievement, setLastAchievement] = useState<string | null>(null)
-  const streakTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const [showMilestone, setShowMilestone] = useState(false)
+  const [milestoneMessage, setMilestoneMessage] = useState<string | null>(null)
+  const [sessionSaves, setSessionSaves] = useState(0)
   const { saveActivity, removeActivity, count: savedCount } = useSavedActivities()
 
   const loadActivities = useCallback(async () => {
@@ -45,7 +44,7 @@ function SwipePage({ city, onChangeCity }: SwipePageProps) {
       setActivities(response.data)
       setCurrentIndex(0)
       setSwipeHistory([])
-      setStreak(0)
+      setSessionSaves(0)
     } else {
       setError(response.error || 'Failed to load activities')
     }
@@ -57,31 +56,28 @@ function SwipePage({ city, onChangeCity }: SwipePageProps) {
     loadActivities()
   }, [loadActivities])
 
-  // Check for streak achievements
+  // Check for milestone achievements based on total saved count
   useEffect(() => {
-    if (streak > 0 && streak % 5 === 0) {
-      const achievements: Record<number, string> = {
-        5: '🔥 On Fire!',
-        10: '⚡ Super Saver!',
-        15: '🌟 Activity Hunter!',
-        20: '👑 Legend!',
-        25: '🚀 Unstoppable!',
-      }
-      const achievement = achievements[streak]
-      if (achievement) {
-        setLastAchievement(achievement)
-        setShowStreakPopup(true)
-        setTimeout(() => setShowStreakPopup(false), 2000)
-      }
+    const milestones: Record<number, string> = {
+      1: '🎉 First Save!',
+      5: '⭐ Getting Started!',
+      10: '🔥 Adventure Seeker!',
+      25: '🌟 Explorer!',
+      50: '👑 Travel Pro!',
     }
-  }, [streak])
+    const message = milestones[savedCount]
+    if (message) {
+      setMilestoneMessage(message)
+      setShowMilestone(true)
+      setTimeout(() => setShowMilestone(false), 2500)
+    }
+  }, [savedCount])
 
   const handleSwipeLeft = useCallback(() => {
     const currentActivity = activities[currentIndex]
     if (currentActivity) {
       setSwipeHistory(prev => [...prev, { activity: currentActivity, action: 'left' }])
     }
-    setStreak(0) // Reset streak on skip
     setCurrentIndex(prev => prev + 1)
   }, [activities, currentIndex])
 
@@ -90,27 +86,16 @@ function SwipePage({ city, onChangeCity }: SwipePageProps) {
     if (currentActivity) {
       saveActivity(currentActivity)
       setSwipeHistory(prev => [...prev, { activity: currentActivity, action: 'right' }])
+      setSessionSaves(prev => prev + 1)
 
-      // Increment streak
-      const newStreak = streak + 1
-      setStreak(newStreak)
-
-      // Show confetti on every 3rd save or milestone
-      if (newStreak % 3 === 0 || newStreak === 1) {
+      // Show confetti on first save of session or every 5th save
+      if (sessionSaves === 0 || (sessionSaves + 1) % 5 === 0) {
         setShowConfetti(true)
         setTimeout(() => setShowConfetti(false), 2000)
       }
-
-      // Reset streak timeout
-      if (streakTimeoutRef.current) {
-        clearTimeout(streakTimeoutRef.current)
-      }
-      streakTimeoutRef.current = setTimeout(() => {
-        setStreak(0)
-      }, 10000) // Reset streak if no save within 10 seconds
     }
     setCurrentIndex(prev => prev + 1)
-  }, [activities, currentIndex, saveActivity, streak])
+  }, [activities, currentIndex, saveActivity, sessionSaves])
 
   const handleUndo = useCallback(() => {
     if (swipeHistory.length === 0 || currentIndex === 0) return
@@ -120,7 +105,7 @@ function SwipePage({ city, onChangeCity }: SwipePageProps) {
     // If last action was a save, remove it from saved
     if (lastItem.action === 'right') {
       removeActivity(lastItem.activity.id)
-      setStreak(prev => Math.max(0, prev - 1))
+      setSessionSaves(prev => Math.max(0, prev - 1))
     }
 
     setSwipeHistory(prev => prev.slice(0, -1))
@@ -217,22 +202,12 @@ function SwipePage({ city, onChangeCity }: SwipePageProps) {
         </button>
       )}
 
-      {/* Streak indicator */}
-      {streak > 0 && (
-        <div className="absolute top-20 right-4 z-30 animate-bounce-in">
-          <div className="bg-gradient-to-r from-orange-500 to-red-500 text-white px-3 py-1.5 rounded-full shadow-lg flex items-center gap-1.5">
-            <span className="text-lg">🔥</span>
-            <span className="font-bold">{streak}</span>
-          </div>
-        </div>
-      )}
-
-      {/* Achievement popup */}
-      {showStreakPopup && lastAchievement && (
+      {/* Milestone popup */}
+      {showMilestone && milestoneMessage && (
         <div className="absolute top-1/3 left-1/2 -translate-x-1/2 z-50 animate-achievement">
           <div className="bg-gradient-to-r from-purple-600 to-pink-600 text-white px-6 py-3 rounded-2xl shadow-2xl">
-            <div className="text-2xl font-bold text-center">{lastAchievement}</div>
-            <div className="text-sm text-center opacity-90">{streak} saves in a row!</div>
+            <div className="text-2xl font-bold text-center">{milestoneMessage}</div>
+            <div className="text-sm text-center opacity-90">{savedCount} activities saved!</div>
           </div>
         </div>
       )}

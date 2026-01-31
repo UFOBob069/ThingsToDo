@@ -11,6 +11,7 @@ function CitySearch({ onSelect }: CitySearchProps) {
   const [results, setResults] = useState<City[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [isOpen, setIsOpen] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const debounceRef = useRef<number | null>(null)
 
@@ -46,6 +47,7 @@ function CitySearch({ onSelect }: CitySearchProps) {
   const handleSelect = useCallback((city: City) => {
     setQuery(city.name)
     setIsOpen(false)
+    inputRef.current?.blur()
     onSelect(city)
   }, [onSelect])
 
@@ -57,7 +59,7 @@ function CitySearch({ onSelect }: CitySearchProps) {
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (inputRef.current && !inputRef.current.contains(e.target as Node)) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setIsOpen(false)
       }
     }
@@ -75,9 +77,57 @@ function CitySearch({ onSelect }: CitySearchProps) {
   }, [])
 
   return (
-    <div className="relative" ref={inputRef}>
+    <div className="relative" ref={containerRef}>
+      {/* Results dropdown - positioned ABOVE the input on mobile */}
+      {isOpen && results.length > 0 && (
+        <ul className="absolute z-10 w-full bottom-full mb-2 bg-white border border-gray-200 rounded-xl shadow-lg max-h-48 overflow-auto">
+          {results.map((city, index) => (
+            <li key={`${city.name}-${city.latitude}-${index}`}>
+              <button
+                onClick={() => handleSelect(city)}
+                className="w-full px-4 py-3 text-left hover:bg-gray-50 active:bg-gray-100
+                           flex items-center gap-3 transition-colors"
+              >
+                <svg
+                  className="w-5 h-5 text-gray-400 flex-shrink-0"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+                  />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+                  />
+                </svg>
+                <div>
+                  <span className="text-gray-900 font-medium">{city.name}</span>
+                  {city.country && (
+                    <span className="text-gray-500 ml-1">, {city.country}</span>
+                  )}
+                </div>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {isOpen && query.length >= 2 && results.length === 0 && !isLoading && (
+        <div className="absolute z-10 w-full bottom-full mb-2 bg-white border border-gray-200 rounded-xl shadow-lg p-4 text-center text-gray-500">
+          No cities found
+        </div>
+      )}
+
       <div className="relative">
         <input
+          ref={inputRef}
           type="text"
           value={query}
           onChange={handleInputChange}
@@ -122,52 +172,6 @@ function CitySearch({ onSelect }: CitySearchProps) {
           </svg>
         )}
       </div>
-
-      {isOpen && results.length > 0 && (
-        <ul className="absolute z-10 w-full mt-2 bg-white border border-gray-200 rounded-xl shadow-lg max-h-60 overflow-auto">
-          {results.map((city, index) => (
-            <li key={`${city.name}-${city.latitude}-${index}`}>
-              <button
-                onClick={() => handleSelect(city)}
-                className="w-full px-4 py-3 text-left hover:bg-gray-50 active:bg-gray-100
-                           flex items-center gap-3 transition-colors"
-              >
-                <svg
-                  className="w-5 h-5 text-gray-400 flex-shrink-0"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-                  />
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
-                  />
-                </svg>
-                <div>
-                  <span className="text-gray-900 font-medium">{city.name}</span>
-                  {city.country && (
-                    <span className="text-gray-500 ml-1">, {city.country}</span>
-                  )}
-                </div>
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {isOpen && query.length >= 2 && results.length === 0 && !isLoading && (
-        <div className="absolute z-10 w-full mt-2 bg-white border border-gray-200 rounded-xl shadow-lg p-4 text-center text-gray-500">
-          No cities found
-        </div>
-      )}
     </div>
   )
 }

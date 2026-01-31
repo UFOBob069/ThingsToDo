@@ -69,8 +69,8 @@ function HomePage({ onCitySelect }: HomePageProps) {
     <div className="min-h-screen flex flex-col bg-gradient-to-b from-primary-500 to-primary-600 safe-area-inset-top safe-area-inset-bottom">
       <div className="flex-1 flex flex-col items-center justify-center px-6 py-12">
         <div className="text-center mb-12">
-          <h1 className="text-4xl font-bold text-white mb-3 tracking-tight">
-            FunTravelSwipe
+          <h1 className="text-4xl font-bold text-white mb-3 tracking-tight drop-shadow-lg">
+            ✈️ Fun Travel Swipe
           </h1>
           <p className="text-primary-100 text-lg">
             Swipe through fun things to do in any city

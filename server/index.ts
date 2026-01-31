@@ -580,7 +580,7 @@ function generateDemoActivities(city: string): ActivityCard[] {
     city,
     latitude: 0,
     longitude: 0,
-    bookingUrl: `https://www.viator.com/`,
+    bookingUrl: `https://www.viator.com/searchResults/all?pid=P00166834&mcid=42383&medium=link&text=${encodeURIComponent(a.name)}`,
     source: 'viator' as const,
   }))
 }

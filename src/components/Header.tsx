@@ -38,7 +38,9 @@ function Header({ city, savedCount, onChangeCity, onViewSaved }: HeaderProps) {
             </svg>
           </button>
 
-          <h1 className="text-lg font-bold text-primary-500">FunTravelSwipe</h1>
+          <h1 className="text-lg font-bold bg-gradient-to-r from-pink-500 via-red-500 to-orange-500 bg-clip-text text-transparent">
+            ✈️ Fun Travel Swipe
+          </h1>
 
           <div className="flex items-center gap-2">
             <button

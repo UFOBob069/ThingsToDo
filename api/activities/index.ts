@@ -390,11 +390,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const data = await response.json()
     const products = data.products || []
+    console.log(`Viator API returned ${products.length} products for ${cityName}`)
     const activities = products.map((p: any) => transformViatorProduct(p, city as string || 'Unknown City'))
 
     res.json(activities)
   } catch (error) {
     console.error('Error fetching activities:', error)
+    console.error('Falling back to demo data. API Key configured:', !!VIATOR_API_KEY)
     const demoActivities = generateDemoActivities(req.query.city as string || 'Unknown City')
     res.json(demoActivities)
   }

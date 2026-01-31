@@ -214,7 +214,7 @@ function SwipePage({ city, onChangeCity }: SwipePageProps) {
 
       {/* Activity type filter bar */}
       <div className="flex-shrink-0 bg-white border-b border-gray-200 px-2 py-2">
-        <div className="flex gap-2 overflow-x-auto scrollbar-hide">
+        <div className="flex gap-2 overflow-x-auto scrollbar-hide justify-center">
           {ACTIVITY_TYPES.map((type) => (
             <button
               key={type.id}

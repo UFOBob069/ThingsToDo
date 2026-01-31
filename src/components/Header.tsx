@@ -38,7 +38,7 @@ function Header({ city, savedCount, onChangeCity, onViewSaved }: HeaderProps) {
             </svg>
           </button>
 
-          <h1 className="text-lg font-bold text-primary-500">DoStuff</h1>
+          <h1 className="text-lg font-bold text-primary-500">FunTravelSwipe</h1>
 
           <div className="flex items-center gap-2">
             <button

@@ -105,11 +105,29 @@ function transformViatorProduct(product: any, city: string): ActivityCard {
 
   const reviewCount = product.reviews?.totalReviews
 
-  // Build booking URL - use the webURL field which contains the direct product link
-  // Viator products have a webURL field with the direct deep link
-  const bookingUrl = product.productUrl
-    || product.webURL
-    || `https://www.viator.com/searchResults/all?text=${encodeURIComponent(product.title || product.productCode)}`
+  // Build booking URL - Viator deep link construction
+  // Priority: productUrl > webURL > constructed URL with product code
+  let bookingUrl = product.productUrl || product.webURL
+
+  if (!bookingUrl && product.productCode) {
+    // Construct Viator deep link using product code
+    // Format: https://www.viator.com/tours/{city-slug}/{title-slug}/d{destId}-{code}
+    const titleSlug = (product.title || 'tour')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '')
+      .substring(0, 50)
+    const citySlug = (city || 'city')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+    const destId = product.destinations?.[0]?.ref || '0'
+    bookingUrl = `https://www.viator.com/tours/${citySlug}/${titleSlug}/d${destId}-${product.productCode}`
+  }
+
+  if (!bookingUrl) {
+    bookingUrl = `https://www.viator.com/searchResults/all?text=${encodeURIComponent(product.title || '')}`
+  }
 
   return {
     id: product.productCode,
@@ -322,12 +340,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const cityName = city as string || 'Unknown City'
 
-    // Build search payload
+    // Build search payload - removed price filter to get more results
     const searchPayload: any = {
-      filtering: {
-        lowestPrice: 0,
-        highestPrice: 500,
-      },
+      filtering: {},
       sorting: {
         sort: 'TRAVELER_RATING',
         order: 'DESCENDING',

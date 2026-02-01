@@ -19,4 +19,10 @@ export interface City {
   latitude: number
   longitude: number
   country?: string
+  bbox?: {
+    topLeftLat: number
+    topLeftLng: number
+    bottomRightLat: number
+    bottomRightLng: number
+  }
 }

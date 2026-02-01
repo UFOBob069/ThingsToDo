@@ -19,52 +19,6 @@ export interface ActivityCard {
 const VIATOR_API_KEY = process.env.VIATOR_API_KEY || ''
 const VIATOR_BASE_URL = 'https://api.viator.com/partner'
 
-// Known destination IDs for major cities (Viator Partner API requires these)
-const KNOWN_DESTINATIONS: Record<string, string> = {
-  'austin': '684',
-  'new york': '687',
-  'los angeles': '645',
-  'san francisco': '651',
-  'las vegas': '684',
-  'chicago': '673',
-  'miami': '662',
-  'seattle': '704',
-  'boston': '678',
-  'denver': '680',
-  'nashville': '682',
-  'new orleans': '719',
-  'san diego': '705',
-  'portland': '706',
-  'atlanta': '676',
-  'philadelphia': '707',
-  'houston': '695',
-  'dallas': '679',
-  'phoenix': '708',
-  'orlando': '672',
-  'honolulu': '284',
-  'london': '737',
-  'paris': '479',
-  'rome': '511',
-  'barcelona': '562',
-  'amsterdam': '525',
-  'berlin': '549',
-  'tokyo': '334',
-  'sydney': '357',
-  'dubai': '828',
-  'singapore': '294',
-  'bangkok': '343',
-  'hong kong': '35',
-  'cancun': '631',
-  'toronto': '623',
-  'vancouver': '622',
-}
-
-// Look up Viator destination ID from city name
-function getDestinationId(cityName: string): string | null {
-  const normalized = cityName.toLowerCase().trim()
-  return KNOWN_DESTINATIONS[normalized] || null
-}
-
 // Strip HTML tags from text
 function stripHtml(html: string | undefined): string {
   if (!html) return ''
@@ -322,7 +276,7 @@ const VIATOR_TAGS: Record<string, string> = {
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
-    const { latitude, longitude, city, destinationId, activityType } = req.query
+    const { latitude, longitude, city, topLeftLat, topLeftLng, bottomRightLat, bottomRightLng, activityType } = req.query
 
     if (!latitude || !longitude) {
       return res.status(400).json({ error: 'Latitude and longitude are required' })
@@ -336,7 +290,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const cityName = city as string || 'Unknown City'
 
-    // Build search payload - removed price filter to get more results
+    // Build search payload
     const searchPayload: any = {
       filtering: {},
       sorting: {
@@ -350,15 +304,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       currency: 'USD',
     }
 
-    // Use provided destinationId, or look it up from known destinations
-    const destId = destinationId as string || getDestinationId(cityName)
-
-    if (destId) {
-      searchPayload.filtering.destination = destId
-      console.log(`Using destination ID ${destId} for ${cityName}`)
+    // Use bounding box for location-scoped search (from Mapbox geocoding)
+    if (topLeftLat && topLeftLng && bottomRightLat && bottomRightLng) {
+      searchPayload.filtering.boundingBox = {
+        topLeftLatitude: parseFloat(topLeftLat as string),
+        topLeftLongitude: parseFloat(topLeftLng as string),
+        bottomRightLatitude: parseFloat(bottomRightLat as string),
+        bottomRightLongitude: parseFloat(bottomRightLng as string),
+      }
+      console.log(`Using bounding box for ${cityName}`)
     } else {
-      // For unknown cities, use freetext search
-      console.log(`No destination ID found for ${cityName}, using freetext search`)
+      // Fallback: use city name as search term
+      console.log(`No bounding box provided for ${cityName}, using freetext search`)
       searchPayload.searchTerm = cityName
     }
 

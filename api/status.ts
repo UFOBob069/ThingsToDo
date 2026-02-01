@@ -10,12 +10,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     timestamp: new Date().toISOString(),
   }
 
-  // Try a product search to verify the key works (using Austin destination ID 684)
+  // Try a product search to verify the key works (using Austin bounding box)
   if (VIATOR_API_KEY) {
     try {
       const searchPayload = {
         filtering: {
-          destination: '684', // Austin destination ID
+          // Austin, TX bounding box
+          boundingBox: {
+            topLeftLatitude: 30.5167,
+            topLeftLongitude: -97.9383,
+            bottomRightLatitude: 30.0986,
+            bottomRightLongitude: -97.5614,
+          },
         },
         sorting: {
           sort: 'TRAVELER_RATING',

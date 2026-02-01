@@ -10,9 +10,12 @@ export async function searchActivities(city: City, activityType?: string): Promi
       city: city.name,
     })
 
-    // Pass destinationId if available for more accurate results
-    if (city.destinationId) {
-      params.set('destinationId', city.destinationId)
+    // Pass bounding box if available for location-scoped results
+    if (city.bbox) {
+      params.set('topLeftLat', city.bbox.topLeftLat.toString())
+      params.set('topLeftLng', city.bbox.topLeftLng.toString())
+      params.set('bottomRightLat', city.bbox.bottomRightLat.toString())
+      params.set('bottomRightLng', city.bbox.bottomRightLng.toString())
     }
 
     // Pass activity type filter if specified

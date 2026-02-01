@@ -13,55 +13,10 @@ const detailsCache = new NodeCache({ stdTTL: 1800 }) // 30 min
 app.use(cors())
 app.use(express.json())
 
-// Viator API configuration
+// API configuration
 const VIATOR_API_KEY = process.env.VIATOR_API_KEY || ''
 const VIATOR_BASE_URL = 'https://api.viator.com/partner'
-
-// Known destination IDs for major cities (Viator Partner API requires these)
-const KNOWN_DESTINATIONS: Record<string, string> = {
-  'austin': '684',
-  'new york': '687',
-  'los angeles': '645',
-  'san francisco': '651',
-  'las vegas': '684',
-  'chicago': '673',
-  'miami': '662',
-  'seattle': '704',
-  'boston': '678',
-  'denver': '680',
-  'nashville': '682',
-  'new orleans': '719',
-  'san diego': '705',
-  'portland': '706',
-  'atlanta': '676',
-  'philadelphia': '707',
-  'houston': '695',
-  'dallas': '679',
-  'phoenix': '708',
-  'orlando': '672',
-  'honolulu': '284',
-  'london': '737',
-  'paris': '479',
-  'rome': '511',
-  'barcelona': '562',
-  'amsterdam': '525',
-  'berlin': '549',
-  'tokyo': '334',
-  'sydney': '357',
-  'dubai': '828',
-  'singapore': '294',
-  'bangkok': '343',
-  'hong kong': '35',
-  'cancun': '631',
-  'toronto': '623',
-  'vancouver': '622',
-}
-
-// Look up Viator destination ID from city name
-function getDestinationId(cityName: string): string | null {
-  const normalized = cityName.toLowerCase().trim()
-  return KNOWN_DESTINATIONS[normalized] || null
-}
+const MAPBOX_ACCESS_TOKEN = process.env.MAPBOX_ACCESS_TOKEN || ''
 
 // Strip HTML tags from text
 function stripHtml(html: string | undefined): string {
@@ -158,13 +113,13 @@ const VIATOR_TAGS: Record<string, string> = {
 // Search activities endpoint
 app.get('/api/activities', async (req, res) => {
   try {
-    const { latitude, longitude, city, destinationId, activityType } = req.query
+    const { latitude, longitude, city, topLeftLat, topLeftLng, bottomRightLat, bottomRightLng, activityType } = req.query
 
     if (!latitude || !longitude) {
       return res.status(400).json({ error: 'Latitude and longitude are required' })
     }
 
-    const cacheKey = `activities-${destinationId || latitude}-${longitude}-${activityType || 'all'}`
+    const cacheKey = `activities-${latitude}-${longitude}-${activityType || 'all'}`
     const cached = searchCache.get<ActivityCard[]>(cacheKey)
 
     if (cached) {
@@ -180,7 +135,7 @@ app.get('/api/activities', async (req, res) => {
 
     const cityName = city as string || 'Unknown City'
 
-    // Build search payload - removed price filter to get more results
+    // Build search payload
     const searchPayload: any = {
       filtering: {},
       sorting: {
@@ -194,15 +149,18 @@ app.get('/api/activities', async (req, res) => {
       currency: 'USD',
     }
 
-    // Use provided destinationId, or look it up from known destinations
-    const destId = destinationId as string || getDestinationId(cityName)
-
-    if (destId) {
-      searchPayload.filtering.destination = destId
-      console.log(`Using destination ID ${destId} for ${cityName}`)
+    // Use bounding box for location-scoped search (from Mapbox geocoding)
+    if (topLeftLat && topLeftLng && bottomRightLat && bottomRightLng) {
+      searchPayload.filtering.boundingBox = {
+        topLeftLatitude: parseFloat(topLeftLat as string),
+        topLeftLongitude: parseFloat(topLeftLng as string),
+        bottomRightLatitude: parseFloat(bottomRightLat as string),
+        bottomRightLongitude: parseFloat(bottomRightLng as string),
+      }
+      console.log(`Using bounding box for ${cityName}`)
     } else {
-      // For unknown cities, use freetext search
-      console.log(`No destination ID found for ${cityName}, using freetext search`)
+      // Fallback: use city name as search term
+      console.log(`No bounding box provided for ${cityName}, using freetext search`)
       searchPayload.searchTerm = cityName
     }
 
@@ -232,6 +190,7 @@ app.get('/api/activities', async (req, res) => {
 
     const data = await response.json()
     const products = data.products || []
+    console.log(`Viator API returned ${products.length} products for ${cityName}`)
     const activities = products.map((p: any) => transformViatorProduct(p, city as string || 'Unknown City'))
 
     searchCache.set(cacheKey, activities)
@@ -292,7 +251,7 @@ app.get('/api/activities/:id', async (req, res) => {
   }
 })
 
-// City search endpoint - uses Viator destinations API for accurate results
+// City search endpoint - uses Mapbox Geocoding API
 app.get('/api/cities', async (req, res) => {
   try {
     const { q } = req.query
@@ -301,49 +260,57 @@ app.get('/api/cities', async (req, res) => {
       return res.json([])
     }
 
-    // If no API key, fall back to hardcoded list
-    if (!VIATOR_API_KEY) {
-      const cities = searchCities(q)
+    // Use Mapbox Geocoding API if token is available
+    if (MAPBOX_ACCESS_TOKEN) {
+      const response = await fetch(
+        `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json?` +
+        new URLSearchParams({
+          access_token: MAPBOX_ACCESS_TOKEN,
+          types: 'place,locality,region',
+          limit: '10',
+          language: 'en',
+        })
+      )
+
+      if (!response.ok) {
+        console.error('Mapbox API error:', response.status)
+        const cities = searchCities(q)
+        return res.json(cities)
+      }
+
+      const data = await response.json()
+
+      const cities = data.features.map((feature: any) => {
+        // Extract country from context
+        const countryContext = feature.context?.find((ctx: any) => ctx.id?.startsWith('country'))
+        const country = countryContext?.text || ''
+
+        // Mapbox bbox format: [minLng, minLat, maxLng, maxLat]
+        const mapboxBbox = feature.bbox
+        const bbox = mapboxBbox ? {
+          topLeftLat: mapboxBbox[3],
+          topLeftLng: mapboxBbox[0],
+          bottomRightLat: mapboxBbox[1],
+          bottomRightLng: mapboxBbox[2],
+        } : undefined
+
+        return {
+          name: feature.text,
+          latitude: feature.center[1],
+          longitude: feature.center[0],
+          country,
+          bbox,
+        }
+      })
+
       return res.json(cities)
     }
 
-    // Use Viator's destinations search for accurate results
-    const response = await fetch(`${VIATOR_BASE_URL}/destinations/search`, {
-      method: 'POST',
-      headers: {
-        'Accept': 'application/json;version=2.0',
-        'Content-Type': 'application/json',
-        'exp-api-key': VIATOR_API_KEY,
-      },
-      body: JSON.stringify({
-        searchTerm: q,
-        searchTypes: ['CITY', 'REGION'],
-      }),
-    })
-
-    if (!response.ok) {
-      console.error('Viator destinations search failed:', response.status)
-      // Fall back to hardcoded list
-      const cities = searchCities(q)
-      return res.json(cities)
-    }
-
-    const data = await response.json()
-    const destinations = data.destinations || []
-
-    // Transform Viator destinations to our City format
-    const cities = destinations.slice(0, 15).map((d: any) => ({
-      name: d.name,
-      latitude: d.center?.latitude || 0,
-      longitude: d.center?.longitude || 0,
-      country: d.parentDestinationName || d.countryName || '',
-      destinationId: d.destinationId?.toString(),
-    }))
-
+    // Fallback to curated list if no Mapbox token
+    const cities = searchCities(q)
     res.json(cities)
   } catch (error) {
     console.error('Error searching cities:', error)
-    // Fall back to hardcoded list on error
     const cities = searchCities(req.query.q as string)
     res.json(cities)
   }

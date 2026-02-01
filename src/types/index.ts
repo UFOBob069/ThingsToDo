@@ -19,7 +19,12 @@ export interface City {
   latitude: number
   longitude: number
   country?: string
-  destinationId?: string  // Viator destination ID for accurate searches
+  bbox?: {
+    topLeftLat: number
+    topLeftLng: number
+    bottomRightLat: number
+    bottomRightLng: number
+  }
 }
 
 export interface SwipeDirection {

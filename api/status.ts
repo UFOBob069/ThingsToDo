@@ -2,11 +2,15 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const VIATOR_API_KEY = process.env.VIATOR_API_KEY || ''
+  const VIATOR_BASE_URL = process.env.VIATOR_API_BASE_URL || 'https://api.viator.com/partner'
+  const MAPBOX_ACCESS_TOKEN = process.env.MAPBOX_ACCESS_TOKEN || ''
 
   const status: any = {
     viatorApiConfigured: !!VIATOR_API_KEY,
     viatorApiKeyLength: VIATOR_API_KEY.length,
     viatorApiKeyPrefix: VIATOR_API_KEY ? VIATOR_API_KEY.substring(0, 8) + '...' : 'not set',
+    viatorBaseUrl: VIATOR_BASE_URL,
+    mapboxConfigured: !!MAPBOX_ACCESS_TOKEN,
     timestamp: new Date().toISOString(),
   }
 
@@ -34,7 +38,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         currency: 'USD',
       }
 
-      const response = await fetch('https://api.viator.com/partner/products/search', {
+      const apiUrl = `${VIATOR_BASE_URL}/products/search`
+      status.apiTestUrl = apiUrl
+
+      const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
           'Accept': 'application/json;version=2.0',

@@ -15,7 +15,7 @@ app.use(express.json())
 
 // API configuration
 const VIATOR_API_KEY = process.env.VIATOR_API_KEY || ''
-const VIATOR_BASE_URL = 'https://api.viator.com/partner'
+const VIATOR_BASE_URL = process.env.VIATOR_API_BASE_URL || 'https://api.viator.com/partner'
 const MAPBOX_ACCESS_TOKEN = process.env.MAPBOX_ACCESS_TOKEN || ''
 
 // Strip HTML tags from text

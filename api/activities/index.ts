@@ -17,7 +17,7 @@ export interface ActivityCard {
 }
 
 const VIATOR_API_KEY = process.env.VIATOR_API_KEY || ''
-const VIATOR_BASE_URL = 'https://api.viator.com/partner'
+const VIATOR_BASE_URL = process.env.VIATOR_API_BASE_URL || 'https://api.viator.com/partner'
 
 // Strip HTML tags from text
 function stripHtml(html: string | undefined): string {
@@ -324,9 +324,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       searchPayload.filtering.tags = [parseInt(VIATOR_TAGS[activityType as string])]
     }
 
+    const apiUrl = `${VIATOR_BASE_URL}/products/search`
+    console.log('Viator API URL:', apiUrl)
+    console.log('API Key prefix:', VIATOR_API_KEY.substring(0, 8) + '...')
     console.log('Search payload:', JSON.stringify(searchPayload))
 
-    const response = await fetch(`${VIATOR_BASE_URL}/products/search`, {
+    const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
         'Accept': 'application/json;version=2.0',
@@ -337,10 +340,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       body: JSON.stringify(searchPayload),
     })
 
+    console.log('Viator API response status:', response.status)
+
     if (!response.ok) {
       const errorText = await response.text()
-      console.error('Viator API error:', response.status, errorText)
-      throw new Error(`Viator API error: ${response.status}`)
+      console.error('Viator API error response:', response.status, errorText)
+      throw new Error(`Viator API error: ${response.status} - ${errorText}`)
     }
 
     const data = await response.json()

@@ -13,71 +13,59 @@ interface ActivityCard {
   reviewCount?: number
   priceText?: string
   bookingUrl: string
-  source: 'amadeus'
+  source: 'viator'
 }
 
-const AMADEUS_API_KEY = process.env.AMADEUS_API_KEY || ''
-const AMADEUS_API_SECRET = process.env.AMADEUS_API_SECRET || ''
-// Use production API if AMADEUS_PRODUCTION is set, otherwise use test
-const AMADEUS_BASE_URL = process.env.AMADEUS_PRODUCTION === 'true'
-  ? 'https://api.amadeus.com'
-  : 'https://test.api.amadeus.com'
+const VIATOR_API_KEY = process.env.VIATOR_API_KEY || ''
+// Use production API if VIATOR_PRODUCTION is set, otherwise use sandbox
+const VIATOR_BASE_URL = process.env.VIATOR_PRODUCTION === 'true'
+  ? 'https://viatorapi.viator.com/service'
+  : 'https://viatorapi.sandbox.viator.com/service'
 
-let accessToken: string | null = null
-let tokenExpiry: number = 0
-
-async function getAmadeusToken(): Promise<string> {
-  if (accessToken && Date.now() < tokenExpiry) {
-    return accessToken
-  }
-
-  const response = await fetch(`${AMADEUS_BASE_URL}/v1/security/oauth2/token`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: new URLSearchParams({
-      grant_type: 'client_credentials',
-      client_id: AMADEUS_API_KEY,
-      client_secret: AMADEUS_API_SECRET,
-    }),
-  })
-
-  if (!response.ok) {
-    throw new Error('Failed to get Amadeus access token')
-  }
-
-  const data = await response.json()
-  accessToken = data.access_token
-  tokenExpiry = Date.now() + (data.expires_in - 60) * 1000
-  return accessToken!
+// Strip HTML tags from text
+function stripHtml(html: string | undefined): string {
+  if (!html) return ''
+  return html
+    .replace(/<[^>]*>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
-function transformActivity(activity: any, city: string): ActivityCard {
-  const price = activity.price
+function transformViatorProduct(product: any, city: string): ActivityCard {
   let priceText: string | undefined
-
-  if (price) {
-    const amount = parseFloat(price.amount)
-    const currency = price.currencyCode || 'USD'
+  if (product.price?.fromPrice) {
+    const amount = parseFloat(product.price.fromPrice)
+    const currency = product.price.currencyCode || 'USD'
     priceText = `${currency === 'USD' ? '$' : currency + ' '}${amount.toFixed(0)}`
+  } else if (product.priceFormatted) {
+    priceText = product.priceFormatted
   }
+
+  const bookingUrl = product.webURL ||
+    `https://www.viator.com/tours/${product.productCode || product.code}`
 
   return {
-    id: activity.id,
-    name: activity.name,
-    shortDescription: activity.shortDescription || activity.description?.substring(0, 150) || '',
-    fullDescription: activity.description,
-    heroImageUrl: activity.pictures?.[0] || 'https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=800&q=80',
+    id: product.productCode || product.code || product.id,
+    name: stripHtml(product.title || product.name),
+    shortDescription: stripHtml(product.shortDescription || product.description?.substring(0, 150) || ''),
+    fullDescription: stripHtml(product.description),
+    heroImageUrl: product.thumbnailURL || product.thumbnailHiResURL ||
+      product.images?.[0]?.url || product.images?.[0]?.thumbnailURL ||
+      'https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=800&q=80',
     city,
-    latitude: parseFloat(activity.geoCode?.latitude || 0),
-    longitude: parseFloat(activity.geoCode?.longitude || 0),
-    rating: activity.rating ? parseFloat(activity.rating) : undefined,
-    reviewCount: activity.reviews?.totalReviews,
+    latitude: product.latitude || 0,
+    longitude: product.longitude || 0,
+    rating: product.rating ? parseFloat(product.rating) : undefined,
+    reviewCount: product.reviewCount || product.reviews,
     priceText,
-    // Use booking link from API, or fall back to Viator search
-    bookingUrl: activity.bookingLink || `https://www.viator.com/searchResults/all?text=${encodeURIComponent(activity.name + ' ' + city)}`,
-    source: 'amadeus',
+    bookingUrl,
+    source: 'viator',
   }
 }
 
@@ -108,9 +96,8 @@ function getDemoActivityById(id: string): ActivityCard | null {
     city: '',
     latitude: 0,
     longitude: 0,
-    // Generate useful booking URL by searching on Viator
     bookingUrl: `https://www.viator.com/searchResults/all?text=${encodeURIComponent(demo.name)}`,
-    source: 'amadeus',
+    source: 'viator',
   }
 }
 
@@ -131,31 +118,40 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(404).json({ error: 'Activity not found' })
     }
 
-    if (!AMADEUS_API_KEY || !AMADEUS_API_SECRET) {
+    if (!VIATOR_API_KEY) {
       return res.status(404).json({ error: 'Activity not found' })
     }
 
-    const token = await getAmadeusToken()
+    console.log(`[Activity Details API] Fetching product ${id} from Viator`)
 
-    const response = await fetch(
-      `${AMADEUS_BASE_URL}/v1/shopping/activities/${id}`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      }
-    )
+    // Fetch product details from Viator
+    const response = await fetch(`${VIATOR_BASE_URL}/product?code=${id}`, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'Accept-Language': 'en-US',
+        'exp-api-key': VIATOR_API_KEY,
+      },
+    })
 
     if (!response.ok) {
-      throw new Error(`Amadeus API error: ${response.status}`)
+      console.error(`[Activity Details API] Viator API error: ${response.status}`)
+      return res.status(404).json({ error: 'Activity not found' })
     }
 
     const data = await response.json()
-    const activity = transformActivity(data.data, '')
+    const product = data.data || data
 
+    if (!product) {
+      return res.status(404).json({ error: 'Activity not found' })
+    }
+
+    const activity = transformViatorProduct(product, product.destinationName || '')
+
+    console.log(`[Activity Details API] Successfully fetched product ${id}`)
     res.json(activity)
   } catch (error) {
-    console.error('Error fetching activity details:', error)
+    console.error('[Activity Details API] Error fetching activity details:', error)
     res.status(404).json({ error: 'Activity not found' })
   }
 }

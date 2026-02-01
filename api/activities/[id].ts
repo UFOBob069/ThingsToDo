@@ -18,7 +18,10 @@ interface ActivityCard {
 
 const AMADEUS_API_KEY = process.env.AMADEUS_API_KEY || ''
 const AMADEUS_API_SECRET = process.env.AMADEUS_API_SECRET || ''
-const AMADEUS_BASE_URL = 'https://test.api.amadeus.com'
+// Use production API if AMADEUS_PRODUCTION is set, otherwise use test
+const AMADEUS_BASE_URL = process.env.AMADEUS_PRODUCTION === 'true'
+  ? 'https://api.amadeus.com'
+  : 'https://test.api.amadeus.com'
 
 let accessToken: string | null = null
 let tokenExpiry: number = 0
@@ -72,7 +75,8 @@ function transformActivity(activity: any, city: string): ActivityCard {
     rating: activity.rating ? parseFloat(activity.rating) : undefined,
     reviewCount: activity.reviews?.totalReviews,
     priceText,
-    bookingUrl: activity.bookingLink || `https://www.amadeus.com/activities/${activity.id}`,
+    // Use booking link from API, or fall back to Viator search
+    bookingUrl: activity.bookingLink || `https://www.viator.com/searchResults/all?text=${encodeURIComponent(activity.name + ' ' + city)}`,
     source: 'amadeus',
   }
 }
@@ -104,7 +108,8 @@ function getDemoActivityById(id: string): ActivityCard | null {
     city: '',
     latitude: 0,
     longitude: 0,
-    bookingUrl: `https://example.com/book/${id}`,
+    // Generate useful booking URL by searching on Viator
+    bookingUrl: `https://www.viator.com/searchResults/all?text=${encodeURIComponent(demo.name)}`,
     source: 'amadeus',
   }
 }

@@ -52,19 +52,41 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const data = await response.json()
 
       const cities: City[] = data.features.map((feature: any) => {
+        // Extract region/state from context
+        const regionContext = feature.context?.find((ctx: any) =>
+          ctx.id.startsWith('region') || ctx.id.startsWith('place')
+        )
+        const region = regionContext?.text || ''
+
         // Extract country from context
         const countryContext = feature.context?.find((ctx: any) => ctx.id.startsWith('country'))
         const country = countryContext?.text || ''
+
+        // Build a more specific location string
+        // For places within the US, include state; for others include region if available
+        let locationSuffix = country
+        if (region && region !== feature.text) {
+          locationSuffix = region + (country ? `, ${country}` : '')
+        }
 
         return {
           name: feature.text,
           latitude: feature.center[1],
           longitude: feature.center[0],
-          country,
+          country: locationSuffix,
         }
       })
 
-      return res.json(cities)
+      // Deduplicate cities by name + country combination
+      const seen = new Set<string>()
+      const uniqueCities = cities.filter(city => {
+        const key = `${city.name.toLowerCase()}-${(city.country || '').toLowerCase()}`
+        if (seen.has(key)) return false
+        seen.add(key)
+        return true
+      })
+
+      return res.json(uniqueCities)
     } catch (error) {
       console.error('Mapbox API error:', error)
       // Fall back to curated list on error

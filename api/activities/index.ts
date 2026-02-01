@@ -18,7 +18,10 @@ export interface ActivityCard {
 
 const AMADEUS_API_KEY = process.env.AMADEUS_API_KEY || ''
 const AMADEUS_API_SECRET = process.env.AMADEUS_API_SECRET || ''
-const AMADEUS_BASE_URL = 'https://test.api.amadeus.com'
+// Use production API if AMADEUS_PRODUCTION is set, otherwise use test
+const AMADEUS_BASE_URL = process.env.AMADEUS_PRODUCTION === 'true'
+  ? 'https://api.amadeus.com'
+  : 'https://test.api.amadeus.com'
 
 let accessToken: string | null = null
 let tokenExpiry: number = 0
@@ -92,7 +95,8 @@ function transformActivity(activity: any, city: string): ActivityCard {
     rating: activity.rating ? parseFloat(activity.rating) : undefined,
     reviewCount: activity.reviews?.totalReviews,
     priceText,
-    bookingUrl: activity.bookingLink || `https://www.amadeus.com/activities/${activity.id}`,
+    // Use booking link from API, or fall back to Viator search
+    bookingUrl: activity.bookingLink || `https://www.viator.com/searchResults/all?text=${encodeURIComponent(stripHtml(activity.name) + ' ' + city)}`,
     source: 'amadeus',
   }
 }
@@ -256,7 +260,8 @@ function generateDemoActivities(city: string): ActivityCard[] {
     city,
     latitude: 0,
     longitude: 0,
-    bookingUrl: `https://example.com/book/${a.id}`,
+    // Generate useful booking URLs by searching on Viator for the activity
+    bookingUrl: `https://www.viator.com/searchResults/all?text=${encodeURIComponent(a.name + ' ' + city)}`,
     source: 'amadeus' as const,
   }))
 }
@@ -271,9 +276,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // If no API keys, return demo data
     if (!AMADEUS_API_KEY || !AMADEUS_API_SECRET) {
+      console.log('[Activities API] No Amadeus credentials configured - returning demo data')
       const demoActivities = generateDemoActivities(city as string || 'Unknown City')
       return res.json(demoActivities)
     }
+
+    console.log(`[Activities API] Fetching activities for ${city} (${latitude}, ${longitude}) using ${AMADEUS_BASE_URL}`)
 
     const token = await getAmadeusToken()
 
@@ -293,9 +301,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const data = await response.json()
     const activities = (data.data || []).map((a: any) => transformActivity(a, city as string || 'Unknown City'))
 
+    console.log(`[Activities API] Successfully fetched ${activities.length} activities from Amadeus`)
     res.json(activities)
   } catch (error) {
-    console.error('Error fetching activities:', error)
+    console.error('[Activities API] Error fetching activities:', error)
+    console.log('[Activities API] Falling back to demo data due to error')
     const demoActivities = generateDemoActivities(req.query.city as string || 'Unknown City')
     res.json(demoActivities)
   }

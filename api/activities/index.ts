@@ -19,54 +19,50 @@ export interface ActivityCard {
 const VIATOR_API_KEY = process.env.VIATOR_API_KEY || ''
 const VIATOR_BASE_URL = 'https://api.viator.com/partner'
 
-// Cache for destination lookups
-const destinationCache: Record<string, { id: string; name: string } | null> = {}
+// Known destination IDs for major cities (Viator Partner API requires these)
+const KNOWN_DESTINATIONS: Record<string, string> = {
+  'austin': '684',
+  'new york': '687',
+  'los angeles': '645',
+  'san francisco': '651',
+  'las vegas': '684',
+  'chicago': '673',
+  'miami': '662',
+  'seattle': '704',
+  'boston': '678',
+  'denver': '680',
+  'nashville': '682',
+  'new orleans': '719',
+  'san diego': '705',
+  'portland': '706',
+  'atlanta': '676',
+  'philadelphia': '707',
+  'houston': '695',
+  'dallas': '679',
+  'phoenix': '708',
+  'orlando': '672',
+  'honolulu': '284',
+  'london': '737',
+  'paris': '479',
+  'rome': '511',
+  'barcelona': '562',
+  'amsterdam': '525',
+  'berlin': '549',
+  'tokyo': '334',
+  'sydney': '357',
+  'dubai': '828',
+  'singapore': '294',
+  'bangkok': '343',
+  'hong kong': '35',
+  'cancun': '631',
+  'toronto': '623',
+  'vancouver': '622',
+}
 
 // Look up Viator destination ID from city name
-async function lookupDestination(cityName: string): Promise<{ id: string; name: string } | null> {
-  if (destinationCache[cityName.toLowerCase()]) {
-    return destinationCache[cityName.toLowerCase()]
-  }
-
-  try {
-    const response = await fetch(`${VIATOR_BASE_URL}/destinations/search`, {
-      method: 'POST',
-      headers: {
-        'Accept': 'application/json;version=2.0',
-        'Content-Type': 'application/json',
-        'exp-api-key': VIATOR_API_KEY,
-      },
-      body: JSON.stringify({
-        searchTerm: cityName,
-        searchTypes: ['CITY', 'REGION'],
-      }),
-    })
-
-    if (!response.ok) {
-      console.error('Destination lookup failed:', response.status)
-      return null
-    }
-
-    const data = await response.json()
-    const destinations = data.destinations || []
-
-    // Find the best match - prefer exact city matches
-    const match = destinations.find((d: any) =>
-      d.name.toLowerCase() === cityName.toLowerCase() ||
-      d.name.toLowerCase().startsWith(cityName.toLowerCase())
-    ) || destinations[0]
-
-    if (match) {
-      const result = { id: match.destinationId.toString(), name: match.name }
-      destinationCache[cityName.toLowerCase()] = result
-      return result
-    }
-  } catch (error) {
-    console.error('Error looking up destination:', error)
-  }
-
-  destinationCache[cityName.toLowerCase()] = null
-  return null
+function getDestinationId(cityName: string): string | null {
+  const normalized = cityName.toLowerCase().trim()
+  return KNOWN_DESTINATIONS[normalized] || null
 }
 
 // Strip HTML tags from text
@@ -354,22 +350,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       currency: 'USD',
     }
 
-    // Use provided destinationId, or look it up from city name
-    if (destinationId) {
-      searchPayload.filtering.destination = destinationId
+    // Use provided destinationId, or look it up from known destinations
+    const destId = destinationId as string || getDestinationId(cityName)
+
+    if (destId) {
+      searchPayload.filtering.destination = destId
+      console.log(`Using destination ID ${destId} for ${cityName}`)
     } else {
-      const destination = await lookupDestination(cityName)
-      if (destination) {
-        searchPayload.filtering.destination = destination.id
-      } else {
-        searchPayload.searchTerm = cityName
-      }
+      // For unknown cities, use freetext search
+      console.log(`No destination ID found for ${cityName}, using freetext search`)
+      searchPayload.searchTerm = cityName
     }
 
     // Add activity type filter if specified
     if (activityType && activityType !== 'all' && VIATOR_TAGS[activityType as string]) {
-      searchPayload.filtering.tags = [VIATOR_TAGS[activityType as string]]
+      searchPayload.filtering.tags = [parseInt(VIATOR_TAGS[activityType as string])]
     }
+
+    console.log('Search payload:', JSON.stringify(searchPayload))
 
     const response = await fetch(`${VIATOR_BASE_URL}/products/search`, {
       method: 'POST',

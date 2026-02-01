@@ -3,42 +3,64 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const VIATOR_API_KEY = process.env.VIATOR_API_KEY || ''
 
-  const status = {
+  const status: any = {
     viatorApiConfigured: !!VIATOR_API_KEY,
     viatorApiKeyLength: VIATOR_API_KEY.length,
     viatorApiKeyPrefix: VIATOR_API_KEY ? VIATOR_API_KEY.substring(0, 8) + '...' : 'not set',
     timestamp: new Date().toISOString(),
   }
 
-  // Try a simple API call to verify the key works
+  // Try a product search to verify the key works (using Austin destination ID 684)
   if (VIATOR_API_KEY) {
     try {
-      const response = await fetch('https://api.viator.com/partner/destinations/search', {
+      const searchPayload = {
+        filtering: {
+          destination: '684', // Austin destination ID
+        },
+        sorting: {
+          sort: 'TRAVELER_RATING',
+          order: 'DESCENDING',
+        },
+        pagination: {
+          start: 1,
+          count: 5,
+        },
+        currency: 'USD',
+      }
+
+      const response = await fetch('https://api.viator.com/partner/products/search', {
         method: 'POST',
         headers: {
           'Accept': 'application/json;version=2.0',
           'Content-Type': 'application/json',
           'exp-api-key': VIATOR_API_KEY,
+          'Accept-Language': 'en-US',
         },
-        body: JSON.stringify({
-          searchTerm: 'Austin',
-          searchTypes: ['CITY'],
-        }),
+        body: JSON.stringify(searchPayload),
       })
 
       const data = await response.json()
 
-      Object.assign(status, {
-        apiTestStatus: response.status,
-        apiTestOk: response.ok,
-        apiTestDestinationsFound: data.destinations?.length || 0,
-        apiTestError: response.ok ? null : data,
-      })
+      status.apiTestStatus = response.status
+      status.apiTestOk = response.ok
+      status.productsFound = data.products?.length || 0
+      status.totalCount = data.totalCount || 0
+
+      if (!response.ok) {
+        status.apiTestError = data
+      } else if (data.products?.[0]) {
+        // Show sample product info
+        const p = data.products[0]
+        status.sampleProduct = {
+          code: p.productCode,
+          title: p.title?.substring(0, 50),
+          hasProductUrl: !!p.productUrl,
+          productUrl: p.productUrl || 'not provided',
+        }
+      }
     } catch (error) {
-      Object.assign(status, {
-        apiTestStatus: 'error',
-        apiTestError: error instanceof Error ? error.message : 'Unknown error',
-      })
+      status.apiTestStatus = 'error'
+      status.apiTestError = error instanceof Error ? error.message : 'Unknown error'
     }
   }
 

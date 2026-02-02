@@ -18,6 +18,55 @@ const VIATOR_API_KEY = process.env.VIATOR_API_KEY || ''
 const VIATOR_BASE_URL = process.env.VIATOR_API_BASE_URL || 'https://api.viator.com/partner'
 const MAPBOX_ACCESS_TOKEN = process.env.MAPBOX_ACCESS_TOKEN || ''
 
+// Cache for destination IDs
+const destinationCache = new NodeCache({ stdTTL: 86400 }) // 24 hour cache
+
+// Look up Viator destination ID from city name
+async function lookupDestinationId(cityName: string): Promise<string | null> {
+  // Check cache first
+  const cacheKey = `dest-${cityName.toLowerCase()}`
+  const cached = destinationCache.get<string>(cacheKey)
+  if (cached) return cached
+
+  try {
+    const response = await fetch(`${VIATOR_BASE_URL}/v1/taxonomy/destinations`, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json;version=2.0',
+        'exp-api-key': VIATOR_API_KEY,
+        'Accept-Language': 'en-US',
+      },
+    })
+
+    if (!response.ok) {
+      console.error('Destinations lookup failed:', response.status)
+      return null
+    }
+
+    const data = await response.json()
+    const destinations = data.data || data.destinations || []
+
+    const normalizedCity = cityName.toLowerCase().trim()
+    const match = destinations.find((d: any) => {
+      const destName = (d.destinationName || d.name || '').toLowerCase()
+      return destName === normalizedCity || destName.includes(normalizedCity) || normalizedCity.includes(destName)
+    })
+
+    if (match) {
+      const destId = (match.destinationId || match.ref)?.toString()
+      console.log(`Found destination ID ${destId} for ${cityName}`)
+      destinationCache.set(cacheKey, destId)
+      return destId
+    }
+
+    console.log(`No destination match found for ${cityName}`)
+    return null
+  } catch (error) {
+    console.error('Error looking up destination:', error)
+    return null
+  }
+}
+
 // Strip HTML tags from text
 function stripHtml(html: string | undefined): string {
   if (!html) return ''
@@ -113,7 +162,7 @@ const VIATOR_TAGS: Record<string, string> = {
 // Search activities endpoint
 app.get('/api/activities', async (req, res) => {
   try {
-    const { latitude, longitude, city, topLeftLat, topLeftLng, bottomRightLat, bottomRightLng, activityType } = req.query
+    const { latitude, longitude, city, activityType } = req.query
 
     if (!latitude || !longitude) {
       return res.status(400).json({ error: 'Latitude and longitude are required' })
@@ -135,6 +184,10 @@ app.get('/api/activities', async (req, res) => {
 
     const cityName = city as string || 'Unknown City'
 
+    // Look up Viator destination ID for this city
+    console.log(`Looking up destination ID for: ${cityName}`)
+    const destinationId = await lookupDestinationId(cityName)
+
     // Build search payload
     const searchPayload: any = {
       filtering: {},
@@ -149,18 +202,13 @@ app.get('/api/activities', async (req, res) => {
       currency: 'USD',
     }
 
-    // Use bounding box for location-scoped search (from Mapbox geocoding)
-    if (topLeftLat && topLeftLng && bottomRightLat && bottomRightLng) {
-      searchPayload.filtering.boundingBox = {
-        topLeftLatitude: parseFloat(topLeftLat as string),
-        topLeftLongitude: parseFloat(topLeftLng as string),
-        bottomRightLatitude: parseFloat(bottomRightLat as string),
-        bottomRightLongitude: parseFloat(bottomRightLng as string),
-      }
-      console.log(`Using bounding box for ${cityName}`)
+    // Use destination ID if found (required by Viator API)
+    if (destinationId) {
+      searchPayload.filtering.destination = destinationId
+      console.log(`Using destination ID ${destinationId} for ${cityName}`)
     } else {
       // Fallback: use city name as search term
-      console.log(`No bounding box provided for ${cityName}, using freetext search`)
+      console.log(`No destination ID found for ${cityName}, using freetext search`)
       searchPayload.searchTerm = cityName
     }
 

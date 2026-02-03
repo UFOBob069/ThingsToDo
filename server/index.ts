@@ -18,53 +18,86 @@ const VIATOR_API_KEY = process.env.VIATOR_API_KEY || ''
 const VIATOR_BASE_URL = process.env.VIATOR_API_BASE_URL || 'https://api.viator.com/partner'
 const MAPBOX_ACCESS_TOKEN = process.env.MAPBOX_ACCESS_TOKEN || ''
 
-// Cache for destination IDs
-const destinationCache = new NodeCache({ stdTTL: 86400 }) // 24 hour cache
+// Hardcoded Viator destination IDs for common cities
+const DESTINATION_IDS: Record<string, string> = {
+  // USA
+  'austin': '684',
+  'new york': '687',
+  'new york city': '687',
+  'nyc': '687',
+  'los angeles': '645',
+  'la': '645',
+  'san francisco': '651',
+  'las vegas': '684',
+  'chicago': '673',
+  'miami': '662',
+  'seattle': '704',
+  'boston': '678',
+  'denver': '680',
+  'nashville': '682',
+  'new orleans': '719',
+  'san diego': '705',
+  'portland': '706',
+  'atlanta': '676',
+  'philadelphia': '707',
+  'houston': '695',
+  'dallas': '679',
+  'phoenix': '708',
+  'orlando': '672',
+  'honolulu': '284',
+  'washington': '657',
+  'washington dc': '657',
+  'dc': '657',
+  // International
+  'london': '737',
+  'paris': '479',
+  'rome': '511',
+  'barcelona': '562',
+  'amsterdam': '525',
+  'berlin': '549',
+  'tokyo': '334',
+  'sydney': '357',
+  'dubai': '828',
+  'singapore': '294',
+  'bangkok': '343',
+  'hong kong': '35',
+  'cancun': '631',
+  'toronto': '623',
+  'vancouver': '622',
+  'lisbon': '538',
+  'madrid': '564',
+  'florence': '512',
+  'venice': '522',
+  'dublin': '504',
+  'edinburgh': '738',
+  'prague': '540',
+  'vienna': '454',
+  'athens': '496',
+  'bali': '347',
+  'phuket': '349',
+  'maui': '286',
+  'cabo san lucas': '628',
+  'puerto rico': '701',
+  'san juan': '701',
+}
 
 // Look up Viator destination ID from city name
-async function lookupDestinationId(cityName: string): Promise<string | null> {
-  // Check cache first
-  const cacheKey = `dest-${cityName.toLowerCase()}`
-  const cached = destinationCache.get<string>(cacheKey)
-  if (cached) return cached
+function getDestinationId(cityName: string): string | null {
+  const normalized = cityName.toLowerCase().trim()
 
-  try {
-    const response = await fetch(`${VIATOR_BASE_URL}/v1/taxonomy/destinations`, {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json;version=2.0',
-        'exp-api-key': VIATOR_API_KEY,
-        'Accept-Language': 'en-US',
-      },
-    })
-
-    if (!response.ok) {
-      console.error('Destinations lookup failed:', response.status)
-      return null
-    }
-
-    const data = await response.json()
-    const destinations = data.data || data.destinations || []
-
-    const normalizedCity = cityName.toLowerCase().trim()
-    const match = destinations.find((d: any) => {
-      const destName = (d.destinationName || d.name || '').toLowerCase()
-      return destName === normalizedCity || destName.includes(normalizedCity) || normalizedCity.includes(destName)
-    })
-
-    if (match) {
-      const destId = (match.destinationId || match.ref)?.toString()
-      console.log(`Found destination ID ${destId} for ${cityName}`)
-      destinationCache.set(cacheKey, destId)
-      return destId
-    }
-
-    console.log(`No destination match found for ${cityName}`)
-    return null
-  } catch (error) {
-    console.error('Error looking up destination:', error)
-    return null
+  // Direct match
+  if (DESTINATION_IDS[normalized]) {
+    return DESTINATION_IDS[normalized]
   }
+
+  // Partial match
+  for (const [key, id] of Object.entries(DESTINATION_IDS)) {
+    if (normalized.includes(key) || key.includes(normalized)) {
+      return id
+    }
+  }
+
+  return null
 }
 
 // Strip HTML tags from text
@@ -185,8 +218,8 @@ app.get('/api/activities', async (req, res) => {
     const cityName = city as string || 'Unknown City'
 
     // Look up Viator destination ID for this city
-    console.log(`Looking up destination ID for: ${cityName}`)
-    const destinationId = await lookupDestinationId(cityName)
+    const destinationId = getDestinationId(cityName)
+    console.log(`Destination lookup for "${cityName}": ${destinationId || 'not found'}`)
 
     // Build search payload
     const searchPayload: any = {

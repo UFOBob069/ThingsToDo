@@ -225,17 +225,15 @@ function transformViatorProduct(product: any, city: string): ActivityCard {
 }
 
 // Viator tag IDs for activity types
+// These IDs were verified from Viator Partner API documentation
 const VIATOR_TAGS: Record<string, string> = {
-  'tours': '21911',      // Tours & Sightseeing
-  'food': '21909',       // Food & Drink
-  'outdoor': '21917',    // Outdoor Activities
-  'culture': '21913',    // Art & Culture
-  'adventure': '21915',  // Adventure & Extreme
-  'water': '21919',      // Water Activities
-  'nightlife': '21921',  // Nightlife
-  'wellness': '21923',   // Wellness & Spas
-  'classes': '21925',    // Classes & Workshops
-  'transport': '21927',  // Transportation
+  'tours': '21913',      // Tours, Sightseeing & Cruises
+  'food': '21911',       // Food & Drink
+  'outdoor': '21909',    // Outdoor Activities
+  'culture': '21514',    // Art & Culture
+  'adventure': '22046',  // Adventure Tours
+  'water': '21442',      // On the Water
+  'nightlife': '21001',  // Nightlife
 }
 
 // Search activities endpoint

@@ -405,7 +405,7 @@ const VIATOR_TAGS: Record<string, string> = {
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
-    const { latitude, longitude, city, activityType } = req.query
+    const { latitude, longitude, city, destinationId: passedDestinationId, activityType } = req.query
 
     if (!latitude || !longitude) {
       return res.status(400).json({ error: 'Latitude and longitude are required' })
@@ -419,9 +419,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const cityName = city as string || 'Unknown City'
 
-    // Look up the Viator destination ID for this city
-    const destinationId = await lookupDestinationId(cityName)
-    console.log(`Destination lookup for "${cityName}": ${destinationId || 'not found'}`)
+    // Use passed destinationId if available, otherwise try to look it up
+    let destinationId: string | null = passedDestinationId as string || null
+    if (!destinationId) {
+      destinationId = await lookupDestinationId(cityName)
+    }
+    console.log(`Destination ID for "${cityName}": ${destinationId || 'not found'} (passed: ${!!passedDestinationId})`)
 
     // Build search payload
     const searchPayload: any = {

@@ -241,13 +241,13 @@ const VIATOR_TAGS: Record<string, string> = {
 // Search activities endpoint
 app.get('/api/activities', async (req, res) => {
   try {
-    const { latitude, longitude, city, activityType } = req.query
+    const { latitude, longitude, city, destinationId: passedDestinationId, activityType } = req.query
 
     if (!latitude || !longitude) {
       return res.status(400).json({ error: 'Latitude and longitude are required' })
     }
 
-    const cacheKey = `activities-${latitude}-${longitude}-${activityType || 'all'}`
+    const cacheKey = `activities-${passedDestinationId || latitude}-${longitude}-${activityType || 'all'}`
     const cached = searchCache.get<ActivityCard[]>(cacheKey)
 
     if (cached) {
@@ -263,9 +263,12 @@ app.get('/api/activities', async (req, res) => {
 
     const cityName = city as string || 'Unknown City'
 
-    // Look up Viator destination ID for this city
-    const destinationId = await lookupDestinationId(cityName)
-    console.log(`Destination lookup for "${cityName}": ${destinationId || 'not found'}`)
+    // Use passed destinationId if available, otherwise try to look it up
+    let destinationId: string | null = passedDestinationId as string || null
+    if (!destinationId) {
+      destinationId = await lookupDestinationId(cityName)
+    }
+    console.log(`Destination ID for "${cityName}": ${destinationId || 'not found'} (passed: ${!!passedDestinationId})`)
 
     // Build search payload
     const searchPayload: any = {

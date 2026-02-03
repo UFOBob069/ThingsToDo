@@ -10,6 +10,11 @@ export async function searchActivities(city: City, activityType?: string): Promi
       city: city.name,
     })
 
+    // Pass Viator destination ID if available (this is the key for accurate results!)
+    if (city.destinationId) {
+      params.set('destinationId', city.destinationId.toString())
+    }
+
     // Pass activity type filter if specified
     if (activityType && activityType !== 'all') {
       params.set('activityType', activityType)

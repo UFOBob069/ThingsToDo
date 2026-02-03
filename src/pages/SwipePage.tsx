@@ -149,6 +149,27 @@ function SwipePage({ city, onChangeCity }: SwipePageProps) {
   const hasMoreCards = currentIndex < activities.length
   const canUndo = sessionHistory.length > 0 && currentIndex > 0
 
+  // Filter bar component to avoid duplication
+  const filterBar = (
+    <div className="flex-shrink-0 bg-white border-b border-gray-200 px-2 py-2">
+      <div className="flex gap-2 overflow-x-auto scrollbar-hide justify-center">
+        {ACTIVITY_TYPES.map((type) => (
+          <button
+            key={type.id}
+            onClick={() => handleTypeChange(type.id)}
+            className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all
+              ${activityType === type.id
+                ? 'bg-primary-500 text-white shadow-md'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+          >
+            <span>{type.icon}</span>
+            <span>{type.label}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex flex-col">
@@ -158,6 +179,7 @@ function SwipePage({ city, onChangeCity }: SwipePageProps) {
           onChangeCity={onChangeCity}
           onViewSaved={() => navigate('/saved')}
         />
+        {filterBar}
         <LoadingState message={`Finding things to do in ${city.name}...`} />
       </div>
     )
@@ -172,6 +194,7 @@ function SwipePage({ city, onChangeCity }: SwipePageProps) {
           onChangeCity={onChangeCity}
           onViewSaved={() => navigate('/saved')}
         />
+        {filterBar}
         <EmptyState
           title="Oops!"
           message={error}
@@ -183,6 +206,7 @@ function SwipePage({ city, onChangeCity }: SwipePageProps) {
   }
 
   if (!hasMoreCards) {
+    const noResultsForFilter = activities.length === 0 && activityType !== 'all'
     return (
       <div className="min-h-screen flex flex-col">
         <Header
@@ -191,13 +215,16 @@ function SwipePage({ city, onChangeCity }: SwipePageProps) {
           onChangeCity={onChangeCity}
           onViewSaved={() => navigate('/saved')}
         />
+        {filterBar}
         <EmptyState
-          title="That's all!"
-          message={`You've seen all ${activities.length} activities in ${city.name}`}
-          actionLabel={savedCount > 0 ? 'View Saved' : 'Try Another City'}
-          onAction={savedCount > 0 ? () => navigate('/saved') : onChangeCity}
-          secondaryLabel={savedCount > 0 ? 'Change City' : undefined}
-          onSecondaryAction={savedCount > 0 ? onChangeCity : undefined}
+          title={noResultsForFilter ? 'No results' : "That's all!"}
+          message={noResultsForFilter
+            ? `No ${activityType} activities found in ${city.name}. Try a different filter!`
+            : `You've seen all ${activities.length} activities in ${city.name}`}
+          actionLabel={noResultsForFilter ? 'Show All' : (savedCount > 0 ? 'View Saved' : 'Try Another City')}
+          onAction={noResultsForFilter ? () => setActivityType('all') : (savedCount > 0 ? () => navigate('/saved') : onChangeCity)}
+          secondaryLabel={noResultsForFilter ? 'Change City' : (savedCount > 0 ? 'Change City' : undefined)}
+          onSecondaryAction={noResultsForFilter ? onChangeCity : (savedCount > 0 ? onChangeCity : undefined)}
         />
       </div>
     )
@@ -213,23 +240,7 @@ function SwipePage({ city, onChangeCity }: SwipePageProps) {
       />
 
       {/* Activity type filter bar */}
-      <div className="flex-shrink-0 bg-white border-b border-gray-200 px-2 py-2">
-        <div className="flex gap-2 overflow-x-auto scrollbar-hide justify-center">
-          {ACTIVITY_TYPES.map((type) => (
-            <button
-              key={type.id}
-              onClick={() => handleTypeChange(type.id)}
-              className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all
-                ${activityType === type.id
-                  ? 'bg-primary-500 text-white shadow-md'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
-            >
-              <span>{type.icon}</span>
-              <span>{type.label}</span>
-            </button>
-          ))}
-        </div>
-      </div>
+      {filterBar}
 
       {/* Milestone popup */}
       {showMilestone && milestoneMessage && (

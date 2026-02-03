@@ -109,8 +109,11 @@ function CitySearch({ onSelect }: CitySearchProps) {
                 </svg>
                 <div>
                   <span className="text-gray-900 font-medium">{city.name}</span>
-                  {city.country && (
-                    <span className="text-gray-500 ml-1">, {city.country}</span>
+                  {(city.region || city.country) && (
+                    <span className="text-gray-500 ml-1">
+                      {city.region && `, ${city.region}`}
+                      {city.country && `, ${city.country}`}
+                    </span>
                   )}
                 </div>
               </button>

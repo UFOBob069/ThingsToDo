@@ -19,5 +19,6 @@ export interface City {
   latitude: number
   longitude: number
   country?: string
+  region?: string  // State/province
   destinationId?: number  // Viator destination ID
 }

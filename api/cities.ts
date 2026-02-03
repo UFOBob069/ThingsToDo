@@ -5,6 +5,7 @@ export interface City {
   latitude: number
   longitude: number
   country?: string
+  region?: string  // State/province
   destinationId?: number  // Viator destination ID
 }
 
@@ -125,7 +126,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       const cities: City[] = data.features.map((feature: any) => {
         const countryContext = feature.context?.find((ctx: any) => ctx.id?.startsWith('country'))
+        const regionContext = feature.context?.find((ctx: any) => ctx.id?.startsWith('region'))
         const country = countryContext?.text || ''
+        const region = regionContext?.text || regionContext?.short_code?.split('-')[1] || ''
         const cityName = feature.text
 
         // Look up Viator destination ID for this city
@@ -136,6 +139,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           latitude: feature.center[1],
           longitude: feature.center[0],
           country,
+          region,
           destinationId,
         }
       })

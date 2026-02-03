@@ -30,7 +30,7 @@ const DESTINATION_IDS: Record<string, string> = {
   'los angeles': '645',
   'la': '645',
   'san francisco': '651',
-  'las vegas': '684',
+  'las vegas': '631',  // Fixed: was incorrectly 684 (Austin's ID)
   'chicago': '673',
   'miami': '662',
   'seattle': '704',
@@ -83,8 +83,8 @@ const DESTINATION_IDS: Record<string, string> = {
   'san juan': '701',
 }
 
-// Look up Viator destination ID from city name
-function getDestinationId(cityName: string): string | null {
+// Look up Viator destination ID from city name (sync version using hardcoded IDs)
+function getDestinationIdFromCache(cityName: string): string | null {
   const normalized = cityName.toLowerCase().trim()
 
   // Direct match
@@ -100,6 +100,52 @@ function getDestinationId(cityName: string): string | null {
   }
 
   return null
+}
+
+// Look up Viator destination ID dynamically via API
+async function lookupDestinationId(cityName: string): Promise<string | null> {
+  // First check hardcoded cache
+  const cachedId = getDestinationIdFromCache(cityName)
+  if (cachedId) return cachedId
+
+  // Try to fetch from Viator destinations API
+  try {
+    const response = await fetch(`${VIATOR_BASE_URL}/destinations`, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json;version=2.0',
+        'Accept-Language': 'en-US',
+        'exp-api-key': VIATOR_API_KEY,
+      },
+    })
+
+    if (!response.ok) {
+      console.error('Destinations API failed:', response.status)
+      return null
+    }
+
+    const data = await response.json()
+    const destinations = data.destinations || []
+
+    // Find matching destination
+    const normalizedCity = cityName.toLowerCase().trim()
+    const match = destinations.find((d: any) => {
+      const destName = (d.destinationName || '').toLowerCase()
+      return destName === normalizedCity ||
+             destName.includes(normalizedCity) ||
+             normalizedCity.includes(destName)
+    })
+
+    if (match) {
+      console.log(`Found destination via API: ${match.destinationName} -> ${match.destinationId}`)
+      return match.destinationId?.toString()
+    }
+
+    return null
+  } catch (error) {
+    console.error('Error fetching destinations:', error)
+    return null
+  }
 }
 
 // Strip HTML tags from text
@@ -374,7 +420,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const cityName = city as string || 'Unknown City'
 
     // Look up the Viator destination ID for this city
-    const destinationId = getDestinationId(cityName)
+    const destinationId = await lookupDestinationId(cityName)
     console.log(`Destination lookup for "${cityName}": ${destinationId || 'not found'}`)
 
     // Build search payload

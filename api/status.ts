@@ -15,55 +15,94 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (VIATOR_API_KEY) {
-    // Test products search with Austin destination ID (684)
+    // Step 1: Test the /destinations endpoint
     try {
-      const searchPayload = {
-        filtering: {
-          destination: '684', // Austin, TX
-        },
-        sorting: {
-          sort: 'TRAVELER_RATING',
-          order: 'DESCENDING',
-        },
-        pagination: {
-          start: 1,
-          count: 5,
-        },
-        currency: 'USD',
-      }
+      const destUrl = `${VIATOR_BASE_URL}/destinations`
+      status.destinationsUrl = destUrl
 
-      const searchUrl = `${VIATOR_BASE_URL}/products/search`
-      status.searchUrl = searchUrl
-      status.searchPayload = searchPayload
-
-      const response = await fetch(searchUrl, {
-        method: 'POST',
+      const destResponse = await fetch(destUrl, {
+        method: 'GET',
         headers: {
           'Accept': 'application/json;version=2.0',
-          'Content-Type': 'application/json',
-          'exp-api-key': VIATOR_API_KEY,
           'Accept-Language': 'en-US',
+          'exp-api-key': VIATOR_API_KEY,
         },
-        body: JSON.stringify(searchPayload),
       })
 
-      const data = await response.json()
+      status.destinationsStatus = destResponse.status
+      status.destinationsOk = destResponse.ok
 
-      status.searchStatus = response.status
-      status.searchOk = response.ok
-      status.productsFound = data.products?.length || 0
-      status.totalCount = data.totalCount || 0
+      if (destResponse.ok) {
+        const destData = await destResponse.json()
+        const destinations = destData.destinations || []
+        status.totalDestinations = destinations.length
 
-      if (!response.ok) {
-        status.searchError = data
-      } else if (data.products?.[0]) {
-        const p = data.products[0]
-        status.sampleProduct = {
-          code: p.productCode,
-          title: p.title?.substring(0, 60),
-          hasProductUrl: !!p.productUrl,
-          productUrl: p.productUrl || 'not provided by API',
+        // Find Austin to get its correct ID
+        const austin = destinations.find((d: any) =>
+          (d.destinationName || '').toLowerCase() === 'austin'
+        )
+
+        if (austin) {
+          status.austinDestination = {
+            id: austin.destinationId,
+            name: austin.destinationName,
+          }
+
+          // Step 2: Test products search with Austin's real ID
+          const searchPayload = {
+            filtering: {
+              destination: austin.destinationId.toString(),
+            },
+            sorting: {
+              sort: 'TRAVELER_RATING',
+              order: 'DESCENDING',
+            },
+            pagination: {
+              start: 1,
+              count: 5,
+            },
+            currency: 'USD',
+          }
+
+          const searchUrl = `${VIATOR_BASE_URL}/products/search`
+          const searchResponse = await fetch(searchUrl, {
+            method: 'POST',
+            headers: {
+              'Accept': 'application/json;version=2.0',
+              'Content-Type': 'application/json',
+              'Accept-Language': 'en-US',
+              'exp-api-key': VIATOR_API_KEY,
+            },
+            body: JSON.stringify(searchPayload),
+          })
+
+          const searchData = await searchResponse.json()
+
+          status.searchStatus = searchResponse.status
+          status.searchOk = searchResponse.ok
+          status.productsFound = searchData.products?.length || 0
+          status.totalCount = searchData.totalCount || 0
+
+          if (!searchResponse.ok) {
+            status.searchError = searchData
+          } else if (searchData.products?.[0]) {
+            const p = searchData.products[0]
+            status.sampleProduct = {
+              code: p.productCode,
+              title: p.title?.substring(0, 60),
+              hasProductUrl: !!p.productUrl,
+            }
+          }
+        } else {
+          // Show some sample destinations
+          status.sampleDestinations = destinations.slice(0, 5).map((d: any) => ({
+            id: d.destinationId,
+            name: d.destinationName,
+          }))
         }
+      } else {
+        const errorData = await destResponse.json().catch(() => ({}))
+        status.destinationsError = errorData
       }
     } catch (error) {
       status.error = error instanceof Error ? error.message : 'Unknown error'

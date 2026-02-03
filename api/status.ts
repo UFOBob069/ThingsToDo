@@ -15,7 +15,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (VIATOR_API_KEY) {
-    // Step 1: Test the /destinations endpoint
     try {
       const destUrl = `${VIATOR_BASE_URL}/destinations`
       status.destinationsUrl = destUrl
@@ -37,21 +36,42 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const destinations = destData.destinations || []
         status.totalDestinations = destinations.length
 
-        // Find Austin to get its correct ID
-        const austin = destinations.find((d: any) =>
-          (d.destinationName || '').toLowerCase() === 'austin'
-        )
+        // Show raw structure of first destination
+        if (destinations[0]) {
+          status.sampleDestinationRaw = destinations[0]
+        }
 
-        if (austin) {
-          status.austinDestination = {
-            id: austin.destinationId,
-            name: austin.destinationName,
-          }
+        // Find all Austins to see what's available
+        const austinMatches = destinations.filter((d: any) => {
+          const name = (d.destinationName || d.name || '').toLowerCase()
+          return name.includes('austin')
+        })
+        status.austinMatches = austinMatches.slice(0, 5).map((d: any) => ({
+          id: d.destinationId || d.id,
+          name: d.destinationName || d.name,
+          type: d.destinationType || d.type,
+          parentId: d.parentId,
+          lookupId: d.lookupId,
+        }))
 
-          // Step 2: Test products search with Austin's real ID
+        // Find Las Vegas matches
+        const vegasMatches = destinations.filter((d: any) => {
+          const name = (d.destinationName || d.name || '').toLowerCase()
+          return name.includes('vegas')
+        })
+        status.vegasMatches = vegasMatches.slice(0, 3).map((d: any) => ({
+          id: d.destinationId || d.id,
+          name: d.destinationName || d.name,
+        }))
+
+        // If we found Austin, test product search
+        if (austinMatches.length > 0) {
+          const austin = austinMatches[0]
+          const austinId = (austin.destinationId || austin.id)?.toString()
+
           const searchPayload = {
             filtering: {
-              destination: austin.destinationId.toString(),
+              destination: austinId,
             },
             sorting: {
               sort: 'TRAVELER_RATING',
@@ -59,13 +79,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             },
             pagination: {
               start: 1,
-              count: 5,
+              count: 3,
             },
             currency: 'USD',
           }
 
-          const searchUrl = `${VIATOR_BASE_URL}/products/search`
-          const searchResponse = await fetch(searchUrl, {
+          const searchResponse = await fetch(`${VIATOR_BASE_URL}/products/search`, {
             method: 'POST',
             headers: {
               'Accept': 'application/json;version=2.0',
@@ -77,28 +96,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           })
 
           const searchData = await searchResponse.json()
-
-          status.searchStatus = searchResponse.status
-          status.searchOk = searchResponse.ok
-          status.productsFound = searchData.products?.length || 0
-          status.totalCount = searchData.totalCount || 0
-
-          if (!searchResponse.ok) {
-            status.searchError = searchData
-          } else if (searchData.products?.[0]) {
-            const p = searchData.products[0]
-            status.sampleProduct = {
-              code: p.productCode,
-              title: p.title?.substring(0, 60),
-              hasProductUrl: !!p.productUrl,
-            }
+          status.searchWithAustinId = {
+            usedId: austinId,
+            status: searchResponse.status,
+            ok: searchResponse.ok,
+            productsFound: searchData.products?.length || 0,
+            totalCount: searchData.totalCount || 0,
+            firstProductTitle: searchData.products?.[0]?.title?.substring(0, 50),
           }
-        } else {
-          // Show some sample destinations
-          status.sampleDestinations = destinations.slice(0, 5).map((d: any) => ({
-            id: d.destinationId,
-            name: d.destinationName,
-          }))
         }
       } else {
         const errorData = await destResponse.json().catch(() => ({}))

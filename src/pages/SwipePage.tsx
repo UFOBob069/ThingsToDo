@@ -21,16 +21,16 @@ interface SessionHistoryItem {
   action: 'left' | 'right'
 }
 
-// Activity type filters
+// Activity type filters - matches Viator's actual categories
 const ACTIVITY_TYPES = [
   { id: 'all', label: 'All', icon: '🎯' },
   { id: 'tours', label: 'Tours', icon: '🚶' },
   { id: 'food', label: 'Food', icon: '🍽️' },
   { id: 'outdoor', label: 'Outdoor', icon: '🏔️' },
   { id: 'culture', label: 'Culture', icon: '🎭' },
-  { id: 'adventure', label: 'Adventure', icon: '🎢' },
-  { id: 'water', label: 'Water', icon: '🌊' },
-  { id: 'nightlife', label: 'Nightlife', icon: '🌙' },
+  { id: 'tickets', label: 'Tickets', icon: '🎟️' },
+  { id: 'classes', label: 'Classes', icon: '🎨' },
+  { id: 'unique', label: 'Unique', icon: '✨' },
 ]
 
 function SwipePage({ city, onChangeCity }: SwipePageProps) {

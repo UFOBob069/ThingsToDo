@@ -390,15 +390,15 @@ function generateDemoActivities(city: string): ActivityCard[] {
 }
 
 // Viator tag IDs for activity types
-// These IDs were verified from Viator Partner API documentation
+// These IDs match Viator's actual category structure
 const VIATOR_TAGS: Record<string, string> = {
   'tours': '21913',      // Tours, Sightseeing & Cruises
   'food': '21911',       // Food & Drink
   'outdoor': '21909',    // Outdoor Activities
   'culture': '21514',    // Art & Culture
-  'adventure': '22046',  // Adventure Tours
-  'water': '21442',      // On the Water
-  'nightlife': '21001',  // Nightlife
+  'tickets': '21910',    // Tickets & Passes
+  'classes': '21912',    // Classes & Workshops
+  'unique': '21074',     // Unique Experiences
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {

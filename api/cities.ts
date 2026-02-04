@@ -94,6 +94,7 @@ function searchViatorDestinations(query: string, destinations: any[]): City[] {
   })
 
   // Sort: exact matches first, then starts-with, then contains
+  // For same names, prefer CITY over REGION
   matches.sort((a: any, b: any) => {
     const aName = (a.destinationName || a.name || '').toLowerCase()
     const bName = (b.destinationName || b.name || '').toLowerCase()
@@ -108,12 +109,27 @@ function searchViatorDestinations(query: string, destinations: any[]): City[] {
     if (aStarts && !bStarts) return -1
     if (bStarts && !aStarts) return 1
 
+    // Same name - prefer CITY over REGION
+    if (aName === bName) {
+      if (a.destinationType === 'CITY' && b.destinationType !== 'CITY') return -1
+      if (b.destinationType === 'CITY' && a.destinationType !== 'CITY') return 1
+    }
+
     // Alphabetical
     return aName.localeCompare(bName)
   })
 
+  // Deduplicate by name (keep first occurrence which will be preferred type)
+  const seen = new Set<string>()
+  const unique = matches.filter((d: any) => {
+    const name = (d.destinationName || d.name || '').toLowerCase()
+    if (seen.has(name)) return false
+    seen.add(name)
+    return true
+  })
+
   // Convert to City format (limit to 10 results)
-  return matches.slice(0, 10).map((d: any) => {
+  return unique.slice(0, 10).map((d: any) => {
     const parentInfo = getParentInfo(d)
     const destName = d.destinationName || d.name
 

@@ -9,12 +9,12 @@ export interface City {
   destinationId?: number  // Viator destination ID
 }
 
-const MAPBOX_ACCESS_TOKEN = process.env.MAPBOX_ACCESS_TOKEN || ''
 const VIATOR_API_KEY = process.env.VIATOR_API_KEY || ''
 const VIATOR_BASE_URL = process.env.VIATOR_API_BASE_URL || 'https://api.viator.com/partner'
 
 // Cache for Viator destinations (loaded once per cold start)
 let viatorDestinationsCache: any[] | null = null
+let destinationLookup: Map<number, any> | null = null
 
 // Fetch all Viator destinations
 async function getViatorDestinations(): Promise<any[]> {
@@ -39,6 +39,13 @@ async function getViatorDestinations(): Promise<any[]> {
 
     const data = await response.json()
     viatorDestinationsCache = data.destinations || []
+
+    // Build lookup map for parent destinations
+    destinationLookup = new Map()
+    for (const dest of viatorDestinationsCache) {
+      destinationLookup.set(dest.destinationId, dest)
+    }
+
     console.log(`Loaded ${viatorDestinationsCache.length} Viator destinations`)
     return viatorDestinationsCache
   } catch (error) {
@@ -47,74 +54,79 @@ async function getViatorDestinations(): Promise<any[]> {
   }
 }
 
-// Find Viator destination ID for a city
-// First tries exact name match, then falls back to nearest destination by coordinates
-function findViatorDestinationId(
-  cityName: string,
-  lat: number,
-  lon: number,
-  destinations: any[]
-): { destinationId: number | undefined; matchedDestination?: string } {
-  const normalized = cityName.toLowerCase().trim()
+// Get parent destination info (for region/country context)
+function getParentInfo(dest: any): { region?: string; country?: string } {
+  if (!destinationLookup || !dest.parentId) return {}
 
-  // Try exact match first (safest)
-  const exactMatch = destinations.find((d: any) => {
-    const name = (d.destinationName || d.name || '').toLowerCase()
-    return name === normalized
-  })
-  if (exactMatch) {
+  const parent = destinationLookup.get(dest.parentId)
+  if (!parent) return {}
+
+  // If parent is a country, use it as country
+  if (parent.destinationType === 'COUNTRY') {
+    return { country: parent.destinationName }
+  }
+
+  // If parent is a region/state, get its parent for country
+  if (parent.destinationType === 'REGION') {
+    const grandparent = parent.parentId ? destinationLookup.get(parent.parentId) : null
     return {
-      destinationId: exactMatch.destinationId,
-      matchedDestination: exactMatch.destinationName || exactMatch.name
+      region: parent.destinationName,
+      country: grandparent?.destinationName
     }
   }
 
-  // No exact match - find nearest destination by coordinates
-  // Only consider destinations that have coordinates and are of type CITY or REGION
-  const destinationsWithCoords = destinations.filter((d: any) =>
-    d.latitude && d.longitude &&
-    (d.destinationType === 'CITY' || d.destinationType === 'REGION' || !d.destinationType)
-  )
-
-  if (destinationsWithCoords.length === 0) {
-    return { destinationId: undefined }
-  }
-
-  // Calculate distance to each destination and find nearest
-  let nearest: any = null
-  let nearestDistance = Infinity
-
-  for (const dest of destinationsWithCoords) {
-    const distance = calculateDistance(lat, lon, dest.latitude, dest.longitude)
-    if (distance < nearestDistance) {
-      nearestDistance = distance
-      nearest = dest
-    }
-  }
-
-  // Only use nearest if it's within 150km (reasonable travel distance for activities)
-  if (nearest && nearestDistance <= 150) {
-    console.log(`No exact match for "${cityName}", using nearest: "${nearest.destinationName || nearest.name}" (${nearestDistance.toFixed(1)}km away)`)
-    return {
-      destinationId: nearest.destinationId,
-      matchedDestination: nearest.destinationName || nearest.name
-    }
-  }
-
-  return { destinationId: undefined }
+  return { region: parent.destinationName }
 }
 
-// Haversine formula to calculate distance between two coordinates in km
-function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371 // Earth's radius in km
-  const dLat = (lat2 - lat1) * Math.PI / 180
-  const dLon = (lon2 - lon1) * Math.PI / 180
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-    Math.sin(dLon / 2) * Math.sin(dLon / 2)
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-  return R * c
+// Search Viator destinations directly - guarantees 1-to-1 matching
+function searchViatorDestinations(query: string, destinations: any[]): City[] {
+  const q = query.toLowerCase().trim()
+
+  // Filter destinations that match the query
+  // Only include CITY type destinations (not countries or regions)
+  const matches = destinations.filter((d: any) => {
+    const name = (d.destinationName || '').toLowerCase()
+    const type = d.destinationType
+
+    // Only show cities, not countries or broad regions
+    if (type === 'COUNTRY') return false
+
+    // Match if name starts with query or contains query
+    return name.startsWith(q) || name.includes(q)
+  })
+
+  // Sort: exact matches first, then starts-with, then contains
+  matches.sort((a: any, b: any) => {
+    const aName = (a.destinationName || '').toLowerCase()
+    const bName = (b.destinationName || '').toLowerCase()
+
+    // Exact match first
+    if (aName === q && bName !== q) return -1
+    if (bName === q && aName !== q) return 1
+
+    // Starts with query next
+    const aStarts = aName.startsWith(q)
+    const bStarts = bName.startsWith(q)
+    if (aStarts && !bStarts) return -1
+    if (bStarts && !aStarts) return 1
+
+    // Alphabetical
+    return aName.localeCompare(bName)
+  })
+
+  // Convert to City format (limit to 10 results)
+  return matches.slice(0, 10).map((d: any) => {
+    const parentInfo = getParentInfo(d)
+
+    return {
+      name: d.destinationName,
+      latitude: d.latitude || 0,
+      longitude: d.longitude || 0,
+      country: parentInfo.country,
+      region: parentInfo.region,
+      destinationId: d.destinationId,
+    }
+  })
 }
 
 // Fallback cities with known Viator destination IDs
@@ -151,58 +163,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.json([])
   }
 
-  // Load Viator destinations in background
+  // Load Viator destinations
   const viatorDestinations = await getViatorDestinations()
 
-  // Use Mapbox Geocoding API if token is available
-  if (MAPBOX_ACCESS_TOKEN) {
-    try {
-      const response = await fetch(
-        `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json?` +
-        new URLSearchParams({
-          access_token: MAPBOX_ACCESS_TOKEN,
-          types: 'place,locality,region',
-          limit: '10',
-          language: 'en',
-        })
-      )
+  // Search Viator destinations directly - this ensures 1-to-1 matching
+  // Users can only select cities that Viator actually has
+  if (viatorDestinations.length > 0) {
+    const cities = searchViatorDestinations(q as string, viatorDestinations)
 
-      if (!response.ok) {
-        throw new Error(`Mapbox API error: ${response.status}`)
-      }
-
-      const data = await response.json()
-
-      const cities: City[] = data.features.map((feature: any) => {
-        const countryContext = feature.context?.find((ctx: any) => ctx.id?.startsWith('country'))
-        const regionContext = feature.context?.find((ctx: any) => ctx.id?.startsWith('region'))
-        const country = countryContext?.text || ''
-        const region = regionContext?.text || regionContext?.short_code?.split('-')[1] || ''
-        const cityName = feature.text
-        const lat = feature.center[1]
-        const lon = feature.center[0]
-
-        // Look up Viator destination ID for this city (uses coordinates for fallback)
-        const { destinationId } = findViatorDestinationId(cityName, lat, lon, viatorDestinations)
-
-        return {
-          name: cityName,
-          latitude: lat,
-          longitude: lon,
-          country,
-          region,
-          destinationId,
-        }
-      })
-
+    if (cities.length > 0) {
       return res.json(cities)
-    } catch (error) {
-      console.error('Mapbox API error:', error)
-      return res.json(searchFallbackCities(q))
     }
   }
 
-  // Fallback to curated list
-  const cities = searchFallbackCities(q)
+  // Fallback to curated list if Viator destinations not available
+  const cities = searchFallbackCities(q as string)
   res.json(cities)
 }

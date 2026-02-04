@@ -47,25 +47,74 @@ async function getViatorDestinations(): Promise<any[]> {
   }
 }
 
-// Find Viator destination ID for a city name
-function findViatorDestinationId(cityName: string, destinations: any[]): number | undefined {
+// Find Viator destination ID for a city
+// First tries exact name match, then falls back to nearest destination by coordinates
+function findViatorDestinationId(
+  cityName: string,
+  lat: number,
+  lon: number,
+  destinations: any[]
+): { destinationId: number | undefined; matchedDestination?: string } {
   const normalized = cityName.toLowerCase().trim()
 
-  // Try exact match first
+  // Try exact match first (safest)
   const exactMatch = destinations.find((d: any) => {
-    const name = (d.name || '').toLowerCase()
+    const name = (d.destinationName || d.name || '').toLowerCase()
     return name === normalized
   })
-  if (exactMatch) return exactMatch.destinationId
+  if (exactMatch) {
+    return {
+      destinationId: exactMatch.destinationId,
+      matchedDestination: exactMatch.destinationName || exactMatch.name
+    }
+  }
 
-  // Try partial match
-  const partialMatch = destinations.find((d: any) => {
-    const name = (d.name || '').toLowerCase()
-    return name.includes(normalized) || normalized.includes(name)
-  })
-  if (partialMatch) return partialMatch.destinationId
+  // No exact match - find nearest destination by coordinates
+  // Only consider destinations that have coordinates and are of type CITY or REGION
+  const destinationsWithCoords = destinations.filter((d: any) =>
+    d.latitude && d.longitude &&
+    (d.destinationType === 'CITY' || d.destinationType === 'REGION' || !d.destinationType)
+  )
 
-  return undefined
+  if (destinationsWithCoords.length === 0) {
+    return { destinationId: undefined }
+  }
+
+  // Calculate distance to each destination and find nearest
+  let nearest: any = null
+  let nearestDistance = Infinity
+
+  for (const dest of destinationsWithCoords) {
+    const distance = calculateDistance(lat, lon, dest.latitude, dest.longitude)
+    if (distance < nearestDistance) {
+      nearestDistance = distance
+      nearest = dest
+    }
+  }
+
+  // Only use nearest if it's within 150km (reasonable travel distance for activities)
+  if (nearest && nearestDistance <= 150) {
+    console.log(`No exact match for "${cityName}", using nearest: "${nearest.destinationName || nearest.name}" (${nearestDistance.toFixed(1)}km away)`)
+    return {
+      destinationId: nearest.destinationId,
+      matchedDestination: nearest.destinationName || nearest.name
+    }
+  }
+
+  return { destinationId: undefined }
+}
+
+// Haversine formula to calculate distance between two coordinates in km
+function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371 // Earth's radius in km
+  const dLat = (lat2 - lat1) * Math.PI / 180
+  const dLon = (lon2 - lon1) * Math.PI / 180
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2)
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+  return R * c
 }
 
 // Fallback cities with known Viator destination IDs
@@ -130,14 +179,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const country = countryContext?.text || ''
         const region = regionContext?.text || regionContext?.short_code?.split('-')[1] || ''
         const cityName = feature.text
+        const lat = feature.center[1]
+        const lon = feature.center[0]
 
-        // Look up Viator destination ID for this city
-        const destinationId = findViatorDestinationId(cityName, viatorDestinations)
+        // Look up Viator destination ID for this city (uses coordinates for fallback)
+        const { destinationId } = findViatorDestinationId(cityName, lat, lon, viatorDestinations)
 
         return {
           name: cityName,
-          latitude: feature.center[1],
-          longitude: feature.center[0],
+          latitude: lat,
+          longitude: lon,
           country,
           region,
           destinationId,

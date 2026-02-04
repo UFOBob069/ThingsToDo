@@ -282,14 +282,14 @@ app.get('/api/activities', async (req, res) => {
       currency: 'USD',
     }
 
-    // Use destination ID if found (required by Viator API)
+    // Viator API requires a destination ID for accurate results
     if (destinationId) {
       searchPayload.filtering.destination = destinationId
       console.log(`Using destination ID ${destinationId} for ${cityName}`)
     } else {
-      // Fallback: use city name as search term
-      console.log(`No destination ID found for ${cityName}, using freetext search`)
-      searchPayload.searchTerm = cityName
+      // No destination found - return empty results instead of unreliable freetext search
+      console.log(`No Viator destination found for ${cityName} - returning empty results`)
+      return res.json([])
     }
 
     // Add activity type filter if specified

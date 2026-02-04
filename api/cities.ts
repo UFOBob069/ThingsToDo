@@ -61,21 +61,24 @@ function getParentInfo(dest: any): { region?: string; country?: string } {
   const parent = destinationLookup.get(dest.parentId)
   if (!parent) return {}
 
+  const parentName = parent.destinationName || parent.name
+
   // If parent is a country, use it as country
   if (parent.destinationType === 'COUNTRY') {
-    return { country: parent.destinationName }
+    return { country: parentName }
   }
 
   // If parent is a region/state, get its parent for country
   if (parent.destinationType === 'REGION') {
     const grandparent = parent.parentId ? destinationLookup.get(parent.parentId) : null
+    const grandparentName = grandparent?.destinationName || grandparent?.name
     return {
-      region: parent.destinationName,
-      country: grandparent?.destinationName
+      region: parentName,
+      country: grandparentName
     }
   }
 
-  return { region: parent.destinationName }
+  return { region: parentName }
 }
 
 // Search Viator destinations directly - guarantees 1-to-1 matching
@@ -83,13 +86,8 @@ function searchViatorDestinations(query: string, destinations: any[]): City[] {
   const q = query.toLowerCase().trim()
 
   // Filter destinations that match the query
-  // Only include CITY type destinations (not countries or regions)
   const matches = destinations.filter((d: any) => {
-    const name = (d.destinationName || '').toLowerCase()
-    const type = d.destinationType
-
-    // Only show cities, not countries or broad regions
-    if (type === 'COUNTRY') return false
+    const name = (d.destinationName || d.name || '').toLowerCase()
 
     // Match if name starts with query or contains query
     return name.startsWith(q) || name.includes(q)
@@ -97,8 +95,8 @@ function searchViatorDestinations(query: string, destinations: any[]): City[] {
 
   // Sort: exact matches first, then starts-with, then contains
   matches.sort((a: any, b: any) => {
-    const aName = (a.destinationName || '').toLowerCase()
-    const bName = (b.destinationName || '').toLowerCase()
+    const aName = (a.destinationName || a.name || '').toLowerCase()
+    const bName = (b.destinationName || b.name || '').toLowerCase()
 
     // Exact match first
     if (aName === q && bName !== q) return -1
@@ -117,9 +115,10 @@ function searchViatorDestinations(query: string, destinations: any[]): City[] {
   // Convert to City format (limit to 10 results)
   return matches.slice(0, 10).map((d: any) => {
     const parentInfo = getParentInfo(d)
+    const destName = d.destinationName || d.name
 
     return {
-      name: d.destinationName,
+      name: destName,
       latitude: d.latitude || 0,
       longitude: d.longitude || 0,
       country: parentInfo.country,

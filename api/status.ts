@@ -36,14 +36,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const destinations = destData.destinations || []
         status.totalDestinations = destinations.length
 
-        // Find Austin
-        const austinMatches = destinations.filter((d: any) => {
-          const name = (d.destinationName || d.name || '').toLowerCase()
-          return name === 'austin'
-        })
-        if (austinMatches.length > 0) {
-          status.austinId = austinMatches[0].destinationId || austinMatches[0].id
+        // Show sample destination structure
+        if (destinations.length > 0) {
+          status.sampleDestination = destinations[0]
         }
+
+        // Search for specific destinations to debug
+        const searchTerms = ['bali', 'hong kong', 'singapore', 'austin', 'new york']
+        status.searchResults = {}
+        for (const term of searchTerms) {
+          const matches = destinations.filter((d: any) => {
+            const name = (d.destinationName || d.name || '').toLowerCase()
+            return name.includes(term)
+          })
+          status.searchResults[term] = matches.slice(0, 3).map((d: any) => ({
+            id: d.destinationId,
+            name: d.destinationName || d.name,
+            type: d.destinationType,
+            parentId: d.parentId,
+          }))
+        }
+
+        // Count by type
+        const typeCounts: Record<string, number> = {}
+        for (const d of destinations) {
+          const type = d.destinationType || 'unknown'
+          typeCounts[type] = (typeCounts[type] || 0) + 1
+        }
+        status.destinationTypeCounts = typeCounts
       }
 
       // Fetch available tags from Viator
